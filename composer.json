@@ -1,0 +1,25 @@
+{
+    "name": "prasso/messaging",
+    "description": "messaging functionality for Laravel projects",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Prasso\\Messaging\\": "src/"
+        }
+    },
+    "minimum-stability": "dev",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Prasso\\Messaging\\MessagingServiceProvider"
+            ]
+        }
+    },
+    "require": {
+        "php": "^8.0",
+        "illuminate/support": "^9.0|^10.0|^11.0",
+        "filament/filament": "^3.0"
+    }
+
+}
