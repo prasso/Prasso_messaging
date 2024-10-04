@@ -16,6 +16,7 @@ return new class extends Migration
         // Guests Table
         Schema::create('msg_guests', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('user_id');
             $table->string('name');
             $table->string('email')->unique();
             $table->string('phone')->nullable();
@@ -41,8 +42,8 @@ return new class extends Migration
         // Workflow Steps Table
         Schema::create('msg_workflow_steps', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('workflow_id')->constrained('workflows')->onDelete('cascade');
-            $table->foreignId('message_id')->constrained('messages')->onDelete('cascade');
+            $table->foreignId('msg_workflows_id')->constrained('msg_workflows')->onDelete('cascade');
+            $table->foreignId('msg_messages_id')->constrained('msg_messages')->onDelete('cascade');
             $table->integer('delay_in_minutes')->default(0);
             $table->timestamps();
         });
@@ -50,8 +51,8 @@ return new class extends Migration
         // Guest Messages Table (Logs sent messages)
         Schema::create('msg_guest_messages', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('guest_id')->constrained('guests')->onDelete('cascade');
-            $table->foreignId('message_id')->constrained('messages')->onDelete('cascade');
+            $table->foreignId('msg_guest_id')->constrained('msg_guests')->onDelete('cascade');
+            $table->foreignId('msg_message_id')->constrained('msg_messages')->onDelete('cascade');
             $table->boolean('is_sent')->default(false);
             $table->timestamps();
         });
@@ -68,8 +69,8 @@ return new class extends Migration
         // Engagement Responses Table
         Schema::create('msg_engagement_responses', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('engagement_id')->constrained('engagements')->onDelete('cascade');
-            $table->foreignId('guest_id')->constrained('guests')->onDelete('cascade');
+            $table->foreignId('msg_engagement_id')->constrained('msg_engagements')->onDelete('cascade');
+            $table->foreignId('msg_guest_id')->constrained('msg_guests')->onDelete('cascade');
             $table->text('response');
             $table->timestamps();
         });
@@ -87,8 +88,8 @@ return new class extends Migration
         // Campaign Messages Table
         Schema::create('msg_campaign_messages', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('campaign_id')->constrained('campaigns')->onDelete('cascade');
-            $table->foreignId('message_id')->constrained('messages')->onDelete('cascade');
+            $table->foreignId('campaign_id')->constrained('msg_campaigns')->onDelete('cascade');
+            $table->foreignId('message_id')->constrained('msg_messages')->onDelete('cascade');
             $table->timestamps();
         });
     }
@@ -100,6 +101,6 @@ return new class extends Migration
      */
     public function down()
     {
-       
+       //
     }
-}
+};
