@@ -2,7 +2,8 @@
 
 namespace Prasso\Messaging\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;use Prasso\Messaging\Models\MsgGuest;
+use App\Http\Controllers\Controller;
+use Prasso\Messaging\Models\MsgGuest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 

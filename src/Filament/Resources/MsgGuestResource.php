@@ -18,12 +18,15 @@ class MsgGuestResource extends Resource
     protected static ?string $model = MsgGuest::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
-
+   
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                //
+                Components\Hidden::make('id'),
+                Components\TextInput::make('name')->required(),
+                Components\TextInput::make('email')->email()->required(),
+                Components\TextInput::make('phone'),
             ]);
     }
 
@@ -31,7 +34,10 @@ class MsgGuestResource extends Resource
     {
         return $table
             ->columns([
-                //
+                Tables\Columns\TextColumn::make('id'),
+                Tables\Columns\TextColumn::make('name'),
+                Tables\Columns\TextColumn::make('email'),
+                Tables\Columns\TextColumn::make('phone')
             ])
             ->filters([
                 //

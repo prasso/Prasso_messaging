@@ -1,14 +1,14 @@
 <?php
 
-namespace Prasso\Messaging\Filament\Resources\MsgCampaignResource\Pages;
+namespace Prasso\Messaging\Filament\Resources\MsgCampaignsResource\Pages;
 
-use Prasso\Messaging\Filament\Resources\MsgCampaignResource;
+use Prasso\Messaging\Filament\Resources\MsgCampaignsResource;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMsgCampaigns extends ListRecords
 {
-    protected static string $resource = MsgCampaignResource::class;
+    protected static string $resource = MsgCampaignsResource::class;
 
     protected function getHeaderActions(): array
     {

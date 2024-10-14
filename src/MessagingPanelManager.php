@@ -32,10 +32,10 @@ class MessagingPanelManager
 
     protected array $extensions = [];
 
-    protected string $panelId = 'messaging';
+    protected string $panelId = 'admin';
 
     protected static $messaging_resources = [
-        Resources\MsgCampaignResource::class,
+        Resources\MsgCampaignsResource::class,
         Resources\MsgEngagementResource::class,
         Resources\MsgGuestResource::class,
         Resources\MsgMessageResource::class,

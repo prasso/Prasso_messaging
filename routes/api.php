@@ -1,15 +1,15 @@
 <?php
 
 use Illuminate\Support\Facades\Route;    
-use Prasso\Messaging\Http\Controllers\GuestController;
-use Prasso\Messaging\Http\Controllers\MessageController;
-use Prasso\Messaging\Http\Controllers\CampaignController;
-use Prasso\Messaging\Http\Controllers\EngagementController;
-use Prasso\Messaging\Http\Controllers\WorkflowController;
-use Prasso\Messaging\Http\Controllers\GuestMessageController;
-use Prasso\Messaging\Http\Controllers\AlertController;
-use Prasso\Messaging\Http\Controllers\EventController;
-use Prasso\Messaging\Http\Controllers\VoiceBroadcastController;
+use Prasso\Messaging\Http\Controllers\Api\GuestController;
+use Prasso\Messaging\Http\Controllers\Api\MessageController;
+use Prasso\Messaging\Http\Controllers\Api\CampaignController;
+use Prasso\Messaging\Http\Controllers\Api\EngagementController;
+use Prasso\Messaging\Http\Controllers\Api\WorkflowController;
+use Prasso\Messaging\Http\Controllers\Api\GuestMessageController;
+use Prasso\Messaging\Http\Controllers\Api\AlertController;
+use Prasso\Messaging\Http\Controllers\Api\EventController;
+use Prasso\Messaging\Http\Controllers\Api\VoiceBroadcastController;
 
 Route::prefix('api')->group(function () {
 

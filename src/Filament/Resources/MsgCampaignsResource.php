@@ -1,0 +1,46 @@
+<?php
+
+namespace Prasso\Messaging\Filament\Resources;
+
+use Prasso\Messaging\Filament\Resources\MsgCampaignsResource\Pages;
+use Prasso\Messaging\Models\MsgCampaign;
+use Filament\Forms;
+use Filament\Forms\Components;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Filament\Forms\Components\Section;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+
+   class MsgCampaignsResource extends Resource
+   {
+       protected static ?string $model = MsgCampaign::class; // Adjust to your model
+   
+       public static function form(Form $form): Form
+       {
+           return $form->schema([
+            Components\Hidden::make('id'),
+           ]);
+       }
+   
+       public static function table(Table $table): Table
+       {
+           return $table->columns([
+            Tables\Columns\TextColumn::make('id')
+           ]);
+       }
+   
+       public static function getPages(): array
+       {
+        
+
+           return [
+               'index' => Pages\ListMsgCampaigns::route('/'),
+               'create' => Pages\CreateMsgCampaign::route('/create'),
+               'edit' => Pages\EditMsgCampaign::route('/{record}/edit'),
+           ];
+       }
+   }
+   

@@ -23,7 +23,7 @@ class MsgEngagementResource extends Resource
     {
         return $form
             ->schema([
-                //
+                Components\Hidden::make('id'),
             ]);
     }
 
@@ -31,7 +31,7 @@ class MsgEngagementResource extends Resource
     {
         return $table
             ->columns([
-                //
+                Tables\Columns\TextColumn::make('id')
             ])
             ->filters([
                 //

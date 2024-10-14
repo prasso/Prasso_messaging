@@ -3,7 +3,8 @@
 namespace Prasso\Messaging\Http\Controllers\Api;
 
 
-use App\Http\Controllers\Controller;use Prasso\Messaging\Models\MsgCampaign;
+use App\Http\Controllers\Controller;
+use Prasso\Messaging\Models\MsgCampaign;
 use Prasso\Messaging\Models\MsgCampaignMessage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
