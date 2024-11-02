@@ -7,6 +7,7 @@ use Filament\Facades\Filament;
 use Prasso\Messaging\Support\Facades\MessagingPanel;
 use Prasso\Messaging\Filament\Pages;
 use Prasso\Messaging\Filament\Resources;
+use Livewire\Livewire;
 
 class MessagingServiceProvider extends ServiceProvider
 {
@@ -28,6 +29,13 @@ class MessagingServiceProvider extends ServiceProvider
         }
     
         Filament::registerResources(MessagingPanel::getMessagingResources());
+
+        Livewire::component('prasso.messaging.filament.resources.msg-campaign-resource.pages.edit-msg-campaign', \Prasso\Messaging\Filament\Resources\MsgCampaignResource\Pages\EditMsgCampaign::class);
+        Livewire::component('prasso.messaging.filament.resources.msg-engagement-resource.pages.edit-msg-engagement', \Prasso\Messaging\Filament\Resources\MsgEngagementResource\Pages\EditMsgEngagement::class);
+        Livewire::component('prasso.messaging.filament.resources.msg-guest-resource.pages.edit-msg-guest', \Prasso\Messaging\Filament\Resources\MsgGuestResource\Pages\EditMsgGuest::class);
+        Livewire::component('prasso.messaging.filament.resources.msg-message-resource.pages.edit-msg-message', \Prasso\Messaging\Filament\Resources\MsgMessageResource\Pages\EditMsgMessage::class);
+        Livewire::component('prasso.messaging.filament.resources.msg-workflow-resource.pages.edit-msg-workflow', \Prasso\Messaging\Filament\Resources\MsgWorkflowResource\Pages\EditMsgWorkflow::class);
+   
     }
 
     public function register()

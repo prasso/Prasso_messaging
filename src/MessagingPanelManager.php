@@ -35,7 +35,7 @@ class MessagingPanelManager
     protected string $panelId = 'admin';
 
     protected static $messaging_resources = [
-        Resources\MsgCampaignsResource::class,
+        Resources\MsgCampaignResource::class,
         Resources\MsgEngagementResource::class,
         Resources\MsgGuestResource::class,
         Resources\MsgMessageResource::class,

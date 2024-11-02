@@ -2,7 +2,7 @@
 
 namespace Prasso\Messaging\Filament\Resources;
 
-use Prasso\Messaging\Filament\Resources\MsgCampaignsResource\Pages;
+use Prasso\Messaging\Filament\Resources\MsgCampaignResource\Pages;
 use Prasso\Messaging\Models\MsgCampaign;
 use Filament\Forms;
 use Filament\Forms\Components;
@@ -14,7 +14,7 @@ use Filament\Forms\Components\Section;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
-   class MsgCampaignsResource extends Resource
+   class MsgCampaignResource extends Resource
    {
        protected static ?string $model = MsgCampaign::class; // Adjust to your model
    
