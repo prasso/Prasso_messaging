@@ -12,11 +12,11 @@ class MsgMessage extends Model
 
     public function guests()
     {
-        return $this->belongsToMany(Guest::class, 'guest_messages')->withTimestamps();
+        return $this->belongsToMany(MsgGuest::class, 'guest_messages')->withTimestamps();
     }
 
     public function workflows()
     {
-        return $this->belongsToMany(Workflow::class, 'workflow_steps')->withTimestamps();
+        return $this->belongsToMany(MsgWorkflow::class, 'workflow_steps')->withTimestamps();
     }
 }

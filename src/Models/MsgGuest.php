@@ -13,11 +13,11 @@ class MsgGuest extends Model
 
     public function messages()
     {
-        return $this->belongsToMany(Message::class, 'guest_messages')->withTimestamps();
+        return $this->belongsToMany(MsgMessage::class, 'guest_messages')->withTimestamps();
     }
 
     public function engagementResponses()
     {
-        return $this->hasMany(EngagementResponse::class);
+        return $this->hasMany(MsgEngagementResponse::class);
     }
 }

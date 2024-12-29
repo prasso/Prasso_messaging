@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
    class MsgCampaignResource extends Resource
    {
-       protected static ?string $model = MsgCampaign::class; // Adjust to your model
+       protected static ?string $model = MsgCampaign::class;
    
        public static function form(Form $form): Form
        {
@@ -24,7 +24,15 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
             Components\Hidden::make('id'),
            ]);
        }
-   
+       public static function getSlug(): string
+        {
+            return 'msg-campaign'; // override to force singular
+        }
+        public static function getResourceRouteGroup(): string
+        {
+            return 'prasso/messaging/filament';
+        }
+        
        public static function table(Table $table): Table
        {
            return $table->columns([

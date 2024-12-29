@@ -14,6 +14,6 @@ class MsgEngagement extends Model
 
     public function responses()
     {
-        return $this->hasMany(EngagementResponse::class);
+        return $this->hasMany(MsgEngagementResponse::class);
     }
 }
