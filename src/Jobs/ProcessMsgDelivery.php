@@ -10,6 +10,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Mail;
 use Prasso\Messaging\Models\MsgDelivery;
 use Prasso\Messaging\Models\MsgGuest;
+use Twilio\Rest\Client;
 
 class ProcessMsgDelivery implements ShouldQueue
 {
@@ -38,6 +39,9 @@ class ProcessMsgDelivery implements ShouldQueue
             switch ($delivery->channel) {
                 case 'email':
                     $this->sendEmail($delivery);
+                    break;
+                case 'sms':
+                    $this->sendSms($delivery);
                     break;
                 default:
                     $delivery->update([
@@ -88,6 +92,69 @@ class ProcessMsgDelivery implements ShouldQueue
 
         $delivery->update([
             'status' => 'sent',
+            'sent_at' => now(),
+        ]);
+    }
+
+    protected function sendSms(MsgDelivery $delivery): void
+    {
+        $message = $delivery->message;
+
+        // Resolve recipient phone
+        $phone = null;
+        if ($delivery->recipient_type === 'user') {
+            $userModel = config('messaging.user_model');
+            if (class_exists($userModel)) {
+                $user = $userModel::query()->find($delivery->recipient_id);
+                $phone = $user?->getAttribute('phone');
+            }
+        } elseif ($delivery->recipient_type === 'guest') {
+            $guest = MsgGuest::query()->find($delivery->recipient_id);
+            $phone = $guest?->phone;
+        }
+
+        if (empty($phone)) {
+            $delivery->update([
+                'status' => 'failed',
+                'error' => 'missing phone',
+                'failed_at' => now(),
+            ]);
+            return;
+        }
+
+        $from = $delivery->metadata['from'] ?? config('messaging.sms_from');
+        if (empty($from)) {
+            $delivery->update([
+                'status' => 'failed',
+                'error' => 'missing from number',
+                'failed_at' => now(),
+            ]);
+            return;
+        }
+
+        // Normalize phone numbers to E.164 if possible (prepend '+' when missing)
+        $to = str_starts_with($phone, '+') ? $phone : ('+' . preg_replace('/\D+/', '', $phone));
+
+        $sid = config('app.twilio_sid') ?: env('TWILIO_ACCOUNT_SID');
+        $token = config('app.twilio_token') ?: env('TWILIO_AUTH_TOKEN');
+        if (empty($sid) || empty($token)) {
+            $delivery->update([
+                'status' => 'failed',
+                'error' => 'twilio credentials missing',
+                'failed_at' => now(),
+            ]);
+            return;
+        }
+
+        $client = new Client($sid, $token);
+        $twilioMessage = $client->messages->create($to, [
+            'from' => $from,
+            'body' => $message->body,
+        ]);
+
+        $delivery->update([
+            'status' => 'sent',
+            'provider_message_id' => $twilioMessage->sid ?? null,
             'sent_at' => now(),
         ]);
     }
