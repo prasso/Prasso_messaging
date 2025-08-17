@@ -9,11 +9,12 @@ class MsgGuest extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'email', 'phone'];
+    protected $fillable = ['user_id', 'name', 'email', 'phone'];
 
     public function messages()
     {
-        return $this->belongsToMany(MsgMessage::class, 'guest_messages')->withTimestamps();
+        return $this->belongsToMany(MsgMessage::class, 'msg_guest_messages', 'msg_guest_id', 'msg_message_id')
+            ->withTimestamps();
     }
 
     public function engagementResponses()

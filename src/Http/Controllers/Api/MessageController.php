@@ -4,6 +4,8 @@ namespace Prasso\Messaging\Http\Controllers\Api;
 
 
 use App\Http\Controllers\Controller;use Prasso\Messaging\Models\MsgMessage;
+use Prasso\Messaging\Models\MsgDelivery;
+use Prasso\Messaging\Services\RecipientResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -78,7 +80,7 @@ class MessageController extends Controller
         $validatedData = $request->validate([
             'subject' => 'required|string|max:255',
             'body' => 'required|string',
-            'type' => 'required|string|in:email,sms',
+            'type' => 'required|string|in:email,sms,push,inapp',
         ]);
 
         // Create the message
@@ -182,7 +184,7 @@ class MessageController extends Controller
         $validatedData = $request->validate([
             'subject' => 'sometimes|required|string|max:255',
             'body' => 'sometimes|required|string',
-            'type' => 'sometimes|required|string|in:email,sms',
+            'type' => 'sometimes|required|string|in:email,sms,push,inapp',
         ]);
 
         // Update the message
@@ -241,21 +243,24 @@ class MessageController extends Controller
      *     path="/api/messages/send",
      *     tags={"Messages"},
      *     summary="Send a message to selected guests",
-     *     description="Send a specific message to selected guests based on provided guest IDs.",
+     *     description="Send a specific message to selected recipients. Supports guests and users.",
      *     security={{"bearer_token":{}}},
      *     @OA\RequestBody(
      *         required=true,
      *         @OA\JsonContent(
-     *             required={"message_id", "guest_ids"},
+     *             required={"message_id"},
      *             @OA\Property(property="message_id", type="integer", example=1),
-     *             @OA\Property(property="guest_ids", type="array", @OA\Items(type="integer"), example={1, 2, 3})
+     *             @OA\Property(property="guest_ids", type="array", @OA\Items(type="integer"), example={1, 2, 3}),
+     *             @OA\Property(property="user_ids", type="array", @OA\Items(type="integer"), example={10, 11})
      *         )
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="Message sent successfully",
+     *         description="Accepted for processing",
      *         @OA\JsonContent(
-     *             @OA\Property(property="message", type="string", example="Message sent successfully to selected guests")
+     *             @OA\Property(property="message", type="string", example="Queued deliveries"),
+     *             @OA\Property(property="queued", type="integer", example=3),
+     *             @OA\Property(property="skipped", type="integer", example=1)
      *         )
      *     ),
      *     @OA\Response(
@@ -269,13 +274,94 @@ class MessageController extends Controller
         // Validate the request data
         $validatedData = $request->validate([
             'message_id' => 'required|integer|exists:msg_messages,id',
-            'guest_ids' => 'required|array',
-            'guest_ids.*' => 'integer|exists:guests,id',
+            'guest_ids' => 'array',
+            'guest_ids.*' => 'integer|exists:msg_guests,id',
+            'user_ids' => 'array',
+            'user_ids.*' => 'integer|exists:users,id',
         ]);
 
-        // Logic for sending message to guests (implementation details depend on your application)
-        // ...
+        if (empty($validatedData['guest_ids'] ?? []) && empty($validatedData['user_ids'] ?? [])) {
+            return response()->json([
+                'message' => 'At least one of guest_ids or user_ids must be provided.'
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        return response()->json(['message' => 'Message sent successfully to selected guests']);
+        $message = MsgMessage::find($validatedData['message_id']);
+        if (! $message) {
+            return response()->json(['message' => 'Message not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        // Resolve recipients (users and guests)
+        $resolver = app(RecipientResolver::class);
+        $recipients = $resolver->resolve(
+            $validatedData['user_ids'] ?? [],
+            $validatedData['guest_ids'] ?? []
+        );
+
+        $queued = 0;
+        $skipped = 0;
+
+        foreach ($recipients as $recipient) {
+            [$status, $error] = $this->determineStatusForChannel($message->type, $recipient);
+
+            MsgDelivery::create([
+                'msg_message_id' => $message->id,
+                'recipient_type' => $recipient['recipient_type'],
+                'recipient_id' => $recipient['recipient_id'],
+                'channel' => $message->type,
+                'status' => $status,
+                'error' => $error,
+                'metadata' => [
+                    'subject' => $message->subject,
+                    'preview' => mb_substr($message->body, 0, 120),
+                ],
+            ]);
+
+            if ($status === 'queued') {
+                $queued++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        return response()->json([
+            'message' => 'Queued deliveries',
+            'queued' => $queued,
+            'skipped' => $skipped,
+        ]);
+    }
+
+    /**
+     * Determine if recipient has the required contact for the channel.
+     * Returns [status, error].
+     *
+     * @param string $channel
+     * @param array{recipient_type:string, recipient_id:int, email:?string, phone:?string} $recipient
+     * @return array{0:string,1:?string}
+     */
+    protected function determineStatusForChannel(string $channel, array $recipient): array
+    {
+        switch ($channel) {
+            case 'email':
+                if (!empty($recipient['email'])) {
+                    return ['queued', null];
+                }
+                return ['skipped', 'missing email'];
+            case 'sms':
+                if (!empty($recipient['phone'])) {
+                    return ['queued', null];
+                }
+                return ['skipped', 'missing phone'];
+            case 'push':
+                // No push token resolution implemented yet
+                return ['skipped', 'push channel not configured'];
+            case 'inapp':
+                if ($recipient['recipient_type'] === 'user') {
+                    return ['queued', null];
+                }
+                return ['skipped', 'in-app only supported for users'];
+            default:
+                return ['skipped', 'unknown channel'];
+        }
     }
 }

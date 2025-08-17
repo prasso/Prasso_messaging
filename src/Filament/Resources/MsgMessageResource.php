@@ -7,6 +7,7 @@ use Prasso\Messaging\Filament\Resources\MsgMessageResource\RelationManagers;
 use Prasso\Messaging\Models\MsgMessage;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Forms\Components;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -23,7 +24,16 @@ class MsgMessageResource extends Resource
     {
         return $form
             ->schema([
-                Components\Hidden::make('id'),
+                Components\TextInput::make('subject')->required()->maxLength(255),
+                Components\Select::make('type')
+                    ->options([
+                        'email' => 'Email',
+                        'sms' => 'SMS',
+                        'push' => 'Push',
+                        'inapp' => 'In-App',
+                    ])
+                    ->required(),
+                Components\Textarea::make('body')->rows(6)->required(),
             ]);
     }
 
@@ -31,7 +41,10 @@ class MsgMessageResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('id')
+                Tables\Columns\TextColumn::make('id')->sortable(),
+                Tables\Columns\TextColumn::make('subject')->searchable()->limit(50),
+                Tables\Columns\BadgeColumn::make('type'),
+                Tables\Columns\TextColumn::make('created_at')->dateTime()->since(),
             ])
             ->filters([
                 //

@@ -11,7 +11,7 @@ use Prasso\Messaging\Http\Controllers\Api\AlertController;
 use Prasso\Messaging\Http\Controllers\Api\EventController;
 use Prasso\Messaging\Http\Controllers\Api\VoiceBroadcastController;
 
-Route::prefix('api')->group(function () {
+Route::middleware(['api','auth:sanctum'])->prefix('api')->group(function () {
 
 //GuestController;
 Route::get('/guests', [GuestController::class, 'index']);
@@ -77,7 +77,7 @@ Route::delete('/events/{id}', [EventController::class, 'destroy']);
 Route::post('/events/{id}/reminders', [EventController::class, 'scheduleReminders']);
 
 #VoiceBroadcastController;
-Route::post('/voice-broadcasts/send', [VoiceBroadcastController::class, 'send']);
+Route::middleware(['api','auth:sanctum'])->post('/voice-broadcasts/send', [VoiceBroadcastController::class, 'send']);
 
 
 });

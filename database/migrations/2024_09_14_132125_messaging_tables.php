@@ -26,8 +26,9 @@ return new class extends Migration
         // Messages Table
         Schema::create('msg_messages', function (Blueprint $table) {
             $table->id();
-            $table->string('type'); // text, email, voice
-            $table->text('content');
+            $table->string('type'); // email, sms, push, inapp
+            $table->string('subject')->nullable();
+            $table->text('body');
             $table->timestamps();
         });
 
@@ -101,6 +102,15 @@ return new class extends Migration
      */
     public function down()
     {
-       //
+       // Drop tables in reverse dependency order
+       Schema::dropIfExists('msg_campaign_messages');
+       Schema::dropIfExists('msg_campaigns');
+       Schema::dropIfExists('msg_engagement_responses');
+       Schema::dropIfExists('msg_engagements');
+       Schema::dropIfExists('msg_guest_messages');
+       Schema::dropIfExists('msg_workflow_steps');
+       Schema::dropIfExists('msg_workflows');
+       Schema::dropIfExists('msg_messages');
+       Schema::dropIfExists('msg_guests');
     }
 };
