@@ -15,17 +15,17 @@ class MsgWorkflowStep extends Model
 
     protected $table = 'msg_workflow_steps';
 
-    protected $fillable = ['workflow_id', 'message_id', 'delay_in_minutes'];
+    protected $fillable = ['msg_workflows_id', 'msg_messages_id', 'delay_in_minutes'];
 
     // Relationships
 
     public function workflow()
     {
-        return $this->belongsTo(MsgWorkflow::class, 'workflow_id');
+        return $this->belongsTo(MsgWorkflow::class, 'msg_workflows_id');
     }
 
     public function message()
     {
-        return $this->belongsTo(MsgMessage::class, 'message_id');
+        return $this->belongsTo(MsgMessage::class, 'msg_messages_id');
     }
 }

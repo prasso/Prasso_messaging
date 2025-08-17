@@ -6,6 +6,7 @@ namespace Prasso\Messaging\Http\Controllers\Api;
 use App\Http\Controllers\Controller;use Prasso\Messaging\Models\MsgMessage;
 use Prasso\Messaging\Models\MsgDelivery;
 use Prasso\Messaging\Services\RecipientResolver;
+use Prasso\Messaging\Jobs\ProcessMsgDelivery;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -304,7 +305,7 @@ class MessageController extends Controller
         foreach ($recipients as $recipient) {
             [$status, $error] = $this->determineStatusForChannel($message->type, $recipient);
 
-            MsgDelivery::create([
+            $delivery = MsgDelivery::create([
                 'msg_message_id' => $message->id,
                 'recipient_type' => $recipient['recipient_type'],
                 'recipient_id' => $recipient['recipient_id'],
@@ -318,6 +319,7 @@ class MessageController extends Controller
             ]);
 
             if ($status === 'queued') {
+                ProcessMsgDelivery::dispatch($delivery->id);
                 $queued++;
             } else {
                 $skipped++;

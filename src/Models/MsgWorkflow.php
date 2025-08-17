@@ -13,6 +13,6 @@ class MsgWorkflow extends Model
 
     public function steps()
     {
-        return $this->hasMany(MsgWorkflowStep::class);
+        return $this->hasMany(MsgWorkflowStep::class, 'msg_workflows_id');
     }
 }

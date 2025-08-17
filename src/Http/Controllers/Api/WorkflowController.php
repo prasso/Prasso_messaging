@@ -234,7 +234,20 @@ class WorkflowController extends Controller
      *         required=true,
      *         @OA\JsonContent(
      *             required={"steps"},
-     *             @OA\Property(property="steps", type="array", @OA\Items(type="string"), example={"Step 1", "Step 2"})
+     *             @OA\Property(
+     *                 property="steps",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     type="object",
+     *                     required={"msg_messages_id"},
+     *                     @OA\Property(property="msg_messages_id", type="integer", example=10),
+     *                     @OA\Property(property="delay_in_minutes", type="integer", example=15)
+     *                 ),
+     *                 example={
+     *                     {"msg_messages_id": 10, "delay_in_minutes": 0},
+     *                     {"msg_messages_id": 11, "delay_in_minutes": 60}
+     *                 }
+     *             )
      *         )
      *     ),
      *     @OA\Response(
@@ -258,12 +271,19 @@ class WorkflowController extends Controller
             return response()->json(['message' => 'Workflow not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $steps = $request->input('steps', []);
+        $validated = $request->validate([
+            'steps' => 'required|array|min:1',
+            'steps.*.msg_messages_id' => 'required|integer',
+            'steps.*.delay_in_minutes' => 'nullable|integer|min:0',
+        ]);
 
-        foreach ($steps as $stepName) {
+        $steps = $validated['steps'];
+
+        foreach ($steps as $step) {
             MsgWorkflowStep::create([
-                'workflow_id' => $workflow->id,
-                'name' => $stepName,
+                'msg_workflows_id' => $workflow->id,
+                'msg_messages_id' => $step['msg_messages_id'],
+                'delay_in_minutes' => $step['delay_in_minutes'] ?? 0,
             ]);
         }
 
