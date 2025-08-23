@@ -15,11 +15,10 @@ class MessagingServiceProvider extends ServiceProvider
     {
         // Load routes
         $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
-       // $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
 
         // Load migrations
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-
 
         // Publish config file
         if (file_exists(__DIR__.'/../config/messaging.php')) {
@@ -27,6 +26,11 @@ class MessagingServiceProvider extends ServiceProvider
                 __DIR__.'/../config/messaging.php' => config_path('messaging.php'),
             ], 'config');
         }
+        
+        // Publish Twilio config if it doesn't exist
+        $this->publishes([
+            __DIR__.'/../config/twilio.php' => config_path('twilio.php'),
+        ], 'config');
     
         Filament::registerResources(MessagingPanel::getMessagingResources());
 
@@ -44,8 +48,20 @@ class MessagingServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(
             __DIR__.'/../config/messaging.php', 'messaging'
         );
+        
+        // Register services
         $this->app->scoped('messaging', function (): MessagingPanelManager {
             return new MessagingPanelManager();
         });
+        
+        // Register MessageService
+        $this->app->singleton('messaging.message', function ($app) {
+            return new \Prasso\Messaging\Services\MessageService();
+        });
+        
+        // Register Twilio config
+        $this->mergeConfigFrom(
+            __DIR__.'/../config/twilio.php', 'twilio'
+        );
     }
 }

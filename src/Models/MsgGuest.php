@@ -9,7 +9,25 @@ class MsgGuest extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'email', 'phone'];
+    protected $fillable = [
+        'user_id',
+        'name',
+        'email',
+        'phone',
+        'is_subscribed',
+        'last_message_at',
+        'subscription_status_updated_at'
+    ];
+
+    protected $casts = [
+        'is_subscribed' => 'boolean',
+        'last_message_at' => 'datetime',
+        'subscription_status_updated_at' => 'datetime'
+    ];
+
+    protected $attributes = [
+        'is_subscribed' => true // Default to opted-in
+    ];
 
     public function messages()
     {

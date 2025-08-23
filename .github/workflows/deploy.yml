@@ -1,0 +1,84 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: main
+    
+    steps:
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Add known hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to server
+      env:
+        SERVER_IP: ${{ secrets.SERVER_IP }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+        PRASSO_MESSAGING_DEPLOY_PATH: ${{ secrets.PRASSO_MESSAGING_DEPLOY_PATH }}
+      run: |
+        # Export the environment variables so they're available in the script
+        export PRASSO_MESSAGING_DEPLOY_PATH="${{ secrets.PRASSO_MESSAGING_DEPLOY_PATH }}"
+        
+        # Create deployment script
+        cat > deploy.sh << EOL
+        #!/bin/bash
+        set -e
+        
+        echo "Changing to deploy directory..."
+        echo "PRASSO_MESSAGING_DEPLOY_PATH value: $PRASSO_MESSAGING_DEPLOY_PATH"
+        echo "Current directory before cd: $(pwd)"
+        cd $PRASSO_MESSAGING_DEPLOY_PATH
+        echo "Current directory after cd: $(pwd)"
+        
+        # Check if this is a git repository
+        if [ -d ".git" ]; then
+          echo "This is a git repository"
+        else
+          echo "ERROR: Not a git repository. Contents of directory:"
+          ls -la
+        fi
+        
+        echo "Pulling latest changes..."
+        git fetch --all
+        git reset --hard origin/develop
+        
+        echo "Installing dependencies..."
+        composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+        
+        echo "Running migrations..."
+        php artisan migrate --force
+        
+        echo "Optimizing..."
+        php artisan optimize:clear
+        php artisan optimize
+        php artisan view:cache
+        php artisan route:cache
+        php artisan config:cache
+        
+        echo "Deployment completed successfully!"
+        EOL
+
+        # Make the script executable
+        chmod +x deploy.sh
+
+        # Copy the script to the server
+        scp -r deploy.sh $SERVER_USER@$SERVER_IP:~/deploy.sh
+        
+        # Run the deployment script on the server
+        ssh $SERVER_USER@$SERVER_IP "chmod +x ~/deploy.sh && ~/deploy.sh"
+
+    - name: Cleanup
+      if: always()
+      run: |
+        # Clean up the local deployment script
+        rm -f deploy.sh
