@@ -8,6 +8,7 @@ use Prasso\Messaging\Models\MsgDelivery;
 use Prasso\Messaging\Services\RecipientResolver;
 use Prasso\Messaging\Jobs\ProcessMsgDelivery;
 use Prasso\Messaging\Models\MsgGuest;
+use Prasso\Messaging\Models\MsgTeamSetting;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Carbon\Carbon;
@@ -282,6 +283,7 @@ class MessageController extends Controller
             'user_ids' => 'array',
             'user_ids.*' => 'integer|exists:users,id',
             'send_at' => 'nullable|date',
+            'team_id' => 'nullable|integer',
         ]);
 
         if (empty($validatedData['guest_ids'] ?? []) && empty($validatedData['user_ids'] ?? [])) {
@@ -304,8 +306,17 @@ class MessageController extends Controller
 
         $queued = 0;
         $skipped = 0;
+        // Determine team and per-team rate limits
+        $teamId = $validatedData['team_id'] ?? $message->team_id ?? null;
         $batchSize = (int) config('messaging.rate_limit.batch_size', 50);
         $batchInterval = (int) config('messaging.rate_limit.batch_interval_seconds', 1);
+        if ($teamId) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $teamId)->first();
+            if ($teamCfg) {
+                $batchSize = (int) ($teamCfg->rate_batch_size ?? $batchSize);
+                $batchInterval = (int) ($teamCfg->rate_batch_interval_seconds ?? $batchInterval);
+            }
+        }
         $baseDelaySeconds = 0;
         if (!empty($validatedData['send_at'])) {
             $sendAt = Carbon::parse($validatedData['send_at']);
@@ -317,6 +328,7 @@ class MessageController extends Controller
             [$status, $error] = $this->determineStatusForChannel($message->type, $recipient);
 
             $delivery = MsgDelivery::create([
+                'team_id' => $teamId,
                 'msg_message_id' => $message->id,
                 'recipient_type' => $recipient['recipient_type'],
                 'recipient_id' => $recipient['recipient_id'],

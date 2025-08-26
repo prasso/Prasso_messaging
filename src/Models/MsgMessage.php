@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class MsgMessage extends Model
 {
     use HasFactory;
-    protected $fillable = ['subject', 'body', 'type'];
+    protected $fillable = ['team_id', 'subject', 'body', 'type'];
 
     public function guests()
     {

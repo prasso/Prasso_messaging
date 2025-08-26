@@ -20,9 +20,9 @@ This document explains the architecture, data model, API surface, and extension 
 Core tables (created by `2024_09_14_132125_messaging_tables.php`):
 
 - **`msg_guests`**
-  - `id`, `user_id`, `name`, `email` (unique), `phone` (nullable), timestamps
+  - `id`, `team_id`, `user_id`, `name`, `email` (encrypted), `email_hash` (SHA-256), `phone` (encrypted, nullable), `phone_hash` (SHA-256), consent fields, timestamps
 - **`msg_messages`** (Option A)
-  - `id`, `type` (`email|sms|push|inapp`), `subject` (nullable), `body`, timestamps
+  - `id`, `team_id`, `type` (`email|sms|push|inapp`), `subject` (nullable), `body`, timestamps
 - **`msg_workflows`**
   - `id`, `name`, `description` (nullable), timestamps
 - **`msg_workflow_steps`**
@@ -44,10 +44,16 @@ Alter and logging tables:
   - Safe alter to ensure `subject` + `body` exist and drop legacy `content` if present.
 - **`2025_08_17_000002_create_msg_deliveries_table.php`**
   - Creates `msg_deliveries` with delivery audit trails.
+  - Enhanced by Milestone 4 to include `team_id` and `send_at`.
+  
+- **Team settings and security (Milestone 4)**
+  - `2025_08_26_010000_add_team_id_to_core_tables.php` — adds `team_id` to core tables with indexes
+  - `2025_08_26_010100_create_msg_team_settings_table.php` — creates `msg_team_settings` for per-team config
+  - `2025_08_26_010200_add_hashes_to_msg_guests.php` — adds `phone_hash`, `email_hash` to `msg_guests`
 
 `msg_deliveries` columns and indexes:
 
-- `id`, `msg_message_id` FK -> `msg_messages`
+- `id`, `team_id`, `msg_message_id` FK -> `msg_messages`
 - `recipient_type` (`user|guest`)
 - `recipient_id` (FK to `users.id` or `msg_guests.id` depending on `recipient_type`)
 - `channel` (`email|sms|push|inapp`)
@@ -62,7 +68,7 @@ Alter and logging tables:
 ## Key Models and Relations
 
 - `MsgMessage` (`src/Models/MsgMessage.php`)
-  - `$fillable = ['subject','body','type']`
+  - `$fillable = ['team_id','subject','body','type']`
   - `guests()` many-to-many via `msg_guest_messages`
   - `workflows()` many-to-many via `msg_workflow_steps` (note: columns `msg_messages_id`, `msg_workflows_id`)
   - `deliveries()` hasMany to `MsgDelivery`
@@ -71,6 +77,9 @@ Alter and logging tables:
   - Casts `metadata` to array; timestamp casts
 - `MsgGuest` (`src/Models/MsgGuest.php`)
   - Represents external recipients (not registered users)
+  - Encrypted casts for `email` and `phone`; maintains `email_hash` and `phone_hash` mutators
+- `MsgTeamSetting` (`src/Models/MsgTeamSetting.php`)
+  - Per-team overrides: `sms_from`, HELP components, and per-team rate limits
 
 ## Unified Recipient Abstraction
 
@@ -92,10 +101,11 @@ Alter and logging tables:
      - `sms`: requires `phone`
      - `push`: currently skipped (not configured)
      - `inapp`: only supported for `recipient_type = user`
-  4. Creates a `msg_deliveries` row with `status = queued` when viable, otherwise `skipped` with reason in `error`.
+  4. Creates a `msg_deliveries` row (with `team_id` when known) with `status = queued` when viable, otherwise `skipped` with reason in `error`.
   5. Returns counts of `queued` vs `skipped`.
 
 Note: Actual dispatch to providers (Mail/Twilio/Push) should be implemented by background jobs that process queued deliveries and update `status`, `provider_message_id`, and timestamps.
+Rate limiting can be overridden by team via `MsgTeamSetting`.
 
 ## API Surface (Summary)
 
@@ -117,6 +127,21 @@ See `routes/api.php` for authoritative definitions.
 
 - All endpoints require a valid Sanctum token via `Authorization: Bearer <token>`.
 - Consider adding ability/role gates (e.g., `can:manage-messaging`) for finer control.
+
+### PII Protection
+- `MsgGuest` uses Laravel encrypted casts for `email` and `phone`.
+- Hash columns `phone_hash`, `email_hash` (SHA‑256) enable privacy-preserving lookups.
+- Webhook guest resolution uses `phone_hash` with legacy fallback to `phone LIKE`.
+
+### Secrets and From Number Resolution
+- Twilio credentials loaded from `config/twilio.php`/env.
+- SMS `from` resolution precedence: delivery metadata → `MsgTeamSetting.sms_from` → `config('messaging.sms_from')` → `config('twilio.phone_number')`.
+
+## Multi‑Tenancy (Team Isolation)
+- `team_id` added to core tables to scope data by tenant team.
+- `MsgTeamSetting` stores per-team HELP content, rate limits, and `sms_from`.
+- `MessageController::send()` accepts optional `team_id` and applies per-team rate limits.
+- Webhooks set `team_id` on inbound and consent events when sender matches a guest.
 
 ## Extensibility and Next Steps
 
@@ -141,6 +166,10 @@ See `routes/api.php` for authoritative definitions.
 - `database/migrations/2024_09_14_132125_messaging_tables.php`
 - `database/migrations/2025_08_17_000001_alter_msg_messages_add_subject_body.php`
 - `database/migrations/2025_08_17_000002_create_msg_deliveries_table.php`
+- `database/migrations/2025_08_26_010000_add_team_id_to_core_tables.php`
+- `database/migrations/2025_08_26_010100_create_msg_team_settings_table.php`
+- `database/migrations/2025_08_26_010200_add_hashes_to_msg_guests.php`
 - `src/Http/Controllers/Api/MessageController.php`
+- `src/Http/Controllers/Api/TwilioWebhookController.php`
 - `src/Services/RecipientResolver.php`
-- `src/Models/MsgMessage.php`, `src/Models/MsgDelivery.php`, `src/Models/MsgGuest.php`
+- `src/Models/MsgMessage.php`, `src/Models/MsgDelivery.php`, `src/Models/MsgGuest.php`, `src/Models/MsgTeamSetting.php`, `src/Models/MsgConsentEvent.php`, `src/Models/MsgInboundMessage.php`

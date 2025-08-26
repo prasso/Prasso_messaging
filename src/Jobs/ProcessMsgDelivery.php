@@ -10,6 +10,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Mail;
 use Prasso\Messaging\Models\MsgDelivery;
 use Prasso\Messaging\Models\MsgGuest;
+use Prasso\Messaging\Models\MsgTeamSetting;
 use Twilio\Rest\Client;
 
 class ProcessMsgDelivery implements ShouldQueue
@@ -152,7 +153,15 @@ class ProcessMsgDelivery implements ShouldQueue
             return;
         }
 
-        $from = $delivery->metadata['from'] ?? config('messaging.sms_from');
+        // Determine from number with precedence: delivery metadata -> team settings -> app config
+        $from = $delivery->metadata['from'] ?? null;
+        if (empty($from) && !empty($delivery->team_id)) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $delivery->team_id)->first();
+            $from = $teamCfg?->sms_from ?: null;
+        }
+        if (empty($from)) {
+            $from = config('messaging.sms_from') ?: config('twilio.phone_number');
+        }
         if (empty($from)) {
             $delivery->update([
                 'status' => 'failed',

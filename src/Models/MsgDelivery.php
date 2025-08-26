@@ -12,6 +12,7 @@ class MsgDelivery extends Model
     protected $table = 'msg_deliveries';
 
     protected $fillable = [
+        'team_id',
         'msg_message_id',
         'recipient_type',
         'recipient_id',

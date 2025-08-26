@@ -9,6 +9,7 @@ use Prasso\Messaging\Models\MsgGuestMessage;
 use Illuminate\Support\Facades\Log;
 use Prasso\Messaging\Models\MsgConsentEvent;
 use Prasso\Messaging\Models\MsgInboundMessage;
+use Prasso\Messaging\Models\MsgTeamSetting;
 
 class TwilioWebhookController
 {
@@ -27,10 +28,15 @@ class TwilioWebhookController
         
         // Persist inbound message for inbox/history before keyword branching
         $guestId = null;
+        $teamId = null;
         $normalized = $this->normalizePhoneNumber($from);
         if ($normalized) {
-            $guest = MsgGuest::where('phone', 'LIKE', "%$normalized")->first();
+            $hash = hash('sha256', $normalized);
+            $guest = MsgGuest::where('phone_hash', $hash)
+                ->orWhere('phone', 'LIKE', "%$normalized") // fallback for legacy rows
+                ->first();
             $guestId = $guest?->id;
+            $teamId = $guest?->team_id;
         }
 
         // Collect media URLs if present
@@ -42,6 +48,7 @@ class TwilioWebhookController
         }
 
         MsgInboundMessage::create([
+            'team_id' => $teamId,
             'msg_guest_id' => $guestId,
             'from' => $from,
             'to' => $request->input('To'),
@@ -63,7 +70,7 @@ class TwilioWebhookController
             $this->handleOptIn($from, $request);
             $response->message('You are now subscribed to receive messages. Reply STOP to unsubscribe.');
         } elseif ($text === 'HELP' || $text === 'INFO' || $text === 'SUPPORT') {
-            $response->message($this->buildHelpMessage());
+            $response->message($this->buildHelpMessage($teamId));
         } else {
             // Generic acknowledgement, maintain compliance hint
             $response->message('Thank you for your message. Reply HELP for information or STOP to unsubscribe.');
@@ -78,7 +85,10 @@ class TwilioWebhookController
         $normalizedNumber = $this->normalizePhoneNumber($phoneNumber);
         
         // Update all guests with this number and log consent
-        $guests = MsgGuest::where('phone', 'LIKE', "%$normalizedNumber")->get();
+        $hash = hash('sha256', $normalizedNumber);
+        $guests = MsgGuest::where('phone_hash', $hash)
+            ->orWhere('phone', 'LIKE', "%$normalizedNumber")
+            ->get();
         foreach ($guests as $guest) {
             $guest->update([
                 'is_subscribed' => false,
@@ -86,6 +96,7 @@ class TwilioWebhookController
             ]);
 
             MsgConsentEvent::create([
+                'team_id' => $guest->team_id,
                 'msg_guest_id' => $guest->id,
                 'action' => 'opt_out',
                 'method' => 'keyword',
@@ -105,7 +116,10 @@ class TwilioWebhookController
         $normalizedNumber = $this->normalizePhoneNumber($phoneNumber);
         
         // Update all guests with this number and log consent
-        $guests = MsgGuest::where('phone', 'LIKE', "%$normalizedNumber")->get();
+        $hash = hash('sha256', $normalizedNumber);
+        $guests = MsgGuest::where('phone_hash', $hash)
+            ->orWhere('phone', 'LIKE', "%$normalizedNumber")
+            ->get();
         foreach ($guests as $guest) {
             $guest->update([
                 'is_subscribed' => true,
@@ -113,6 +127,7 @@ class TwilioWebhookController
             ]);
 
             MsgConsentEvent::create([
+                'team_id' => $guest->team_id,
                 'msg_guest_id' => $guest->id,
                 'action' => 'opt_in',
                 'method' => 'keyword',
@@ -140,17 +155,34 @@ class TwilioWebhookController
         return $number;
     }
 
-    protected function buildHelpMessage(): string
+    protected function buildHelpMessage(?int $teamId = null): string
     {
+        // Start with global config
         $cfg = (array) config('messaging.help', []);
         $business = $cfg['business_name'] ?? config('app.name', 'Our Service');
         $purpose = $cfg['purpose'] ?? 'You receive messages you opted into.';
         $disclaimer = $cfg['disclaimer'] ?? 'Msg & data rates may apply.';
+        $contact_phone = $cfg['contact_phone'] ?? '';
+        $contact_email = $cfg['contact_email'] ?? '';
+        $contact_website = $cfg['contact_website'] ?? '';
+
+        // Override with team settings if available
+        if ($teamId) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $teamId)->first();
+            if ($teamCfg) {
+                $business = $teamCfg->help_business_name ?: $business;
+                $purpose = $teamCfg->help_purpose ?: $purpose;
+                $disclaimer = $teamCfg->help_disclaimer ?: $disclaimer;
+                $contact_phone = $teamCfg->help_contact_phone ?: $contact_phone;
+                $contact_email = $teamCfg->help_contact_email ?: $contact_email;
+                $contact_website = $teamCfg->help_contact_website ?: $contact_website;
+            }
+        }
 
         $contacts = [];
-        if (!empty($cfg['contact_phone'])) $contacts[] = $cfg['contact_phone'];
-        if (!empty($cfg['contact_email'])) $contacts[] = $cfg['contact_email'];
-        if (!empty($cfg['contact_website'])) $contacts[] = $cfg['contact_website'];
+        if (!empty($contact_phone)) $contacts[] = $contact_phone;
+        if (!empty($contact_email)) $contacts[] = $contact_email;
+        if (!empty($contact_website)) $contacts[] = $contact_website;
         $contact = implode(' | ', $contacts);
 
         $template = $cfg['template'] ?? '{{business}}: {{purpose}} Reply STOP to unsubscribe. {{disclaimer}} {{contact}}';

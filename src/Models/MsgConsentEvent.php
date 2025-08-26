@@ -10,6 +10,7 @@ class MsgConsentEvent extends Model
     use HasFactory;
 
     protected $fillable = [
+        'team_id',
         'msg_guest_id',
         'action',
         'method',

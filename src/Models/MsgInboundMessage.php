@@ -12,6 +12,7 @@ class MsgInboundMessage extends Model
     protected $table = 'msg_inbound_messages';
 
     protected $fillable = [
+        'team_id',
         'msg_guest_id',
         'from',
         'to',
