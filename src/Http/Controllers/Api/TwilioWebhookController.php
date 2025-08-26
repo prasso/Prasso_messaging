@@ -8,6 +8,7 @@ use Prasso\Messaging\Models\MsgGuest;
 use Prasso\Messaging\Models\MsgGuestMessage;
 use Illuminate\Support\Facades\Log;
 use Prasso\Messaging\Models\MsgConsentEvent;
+use Prasso\Messaging\Models\MsgInboundMessage;
 
 class TwilioWebhookController
 {
@@ -24,6 +25,33 @@ class TwilioWebhookController
 
         $response = new \Twilio\TwiML\MessagingResponse();
         
+        // Persist inbound message for inbox/history before keyword branching
+        $guestId = null;
+        $normalized = $this->normalizePhoneNumber($from);
+        if ($normalized) {
+            $guest = MsgGuest::where('phone', 'LIKE', "%$normalized")->first();
+            $guestId = $guest?->id;
+        }
+
+        // Collect media URLs if present
+        $media = [];
+        $numMedia = (int) $request->input('NumMedia', 0);
+        for ($i = 0; $i < $numMedia; $i++) {
+            $url = $request->input("MediaUrl{$i}");
+            if (!empty($url)) $media[] = $url;
+        }
+
+        MsgInboundMessage::create([
+            'msg_guest_id' => $guestId,
+            'from' => $from,
+            'to' => $request->input('To'),
+            'body' => $body,
+            'media' => $media,
+            'provider_message_id' => $request->input('SmsMessageSid') ?: $request->input('MessageSid'),
+            'received_at' => now(),
+            'raw' => $request->all(),
+        ]);
+
         $text = strtoupper($body);
         $optOutKeywords = array_map('strtoupper', (array) config('twilio.opt_out_keywords', []));
         $optInKeywords = array_map('strtoupper', (array) config('twilio.opt_in_keywords', []));

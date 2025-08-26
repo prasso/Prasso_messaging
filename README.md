@@ -10,6 +10,10 @@ See Milestone 2 (Scheduling, Rate Limiting, Templating):
 
 - docs/MILESTONE_2_SCHEDULING_RATE_LIMITING_TEMPLATING.md
 
+See Milestone 3 (Data, Reporting, Inbox):
+
+- docs/MILESTONE_3_DATA_REPORTING_INBOX.md
+
 ### Environment Variables
 
 - Required for Twilio (see `config/twilio.php`):
