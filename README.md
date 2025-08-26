@@ -18,6 +18,10 @@ See Milestone 4 (Multi‑Tenancy & Security):
 
 - docs/MILESTONE_4_MULTI_TENANCY_SECURITY.md
 
+See Milestone 5 (Reliability — Retries, Backoff, Logging, Config Alignment):
+
+- docs/MILESTONE_5_RELIABILITY.md
+
 ### Environment Variables
 
 - Required for Twilio (see `config/twilio.php`):
@@ -28,7 +32,7 @@ See Milestone 4 (Multi‑Tenancy & Security):
 - Optional (Messaging config overrides in `config/messaging.php`):
   - `MESSAGING_BATCH_SIZE` (default: 50)
   - `MESSAGING_BATCH_INTERVAL` (default: 1)
-  - `TWILIO_NUMBER` (currently used for `sms_from`; consider standardizing to `TWILIO_PHONE_NUMBER` in future)
+  - `TWILIO_NUMBER` (historical); prefer `TWILIO_PHONE_NUMBER` and `config('twilio.phone_number')`
   - `MESSAGING_HELP_BUSINESS`, `MESSAGING_HELP_PURPOSE`, `MESSAGING_HELP_PHONE`, `MESSAGING_HELP_EMAIL`, `MESSAGING_HELP_WEBSITE`, `MESSAGING_HELP_DISCLAIMER`
 
 For per‑team overrides (Milestone 4), configure rows in `msg_team_settings` for each `team_id`.

@@ -7,15 +7,30 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Prasso\Messaging\Models\MsgDelivery;
 use Prasso\Messaging\Models\MsgGuest;
 use Prasso\Messaging\Models\MsgTeamSetting;
+use Twilio\Exceptions\RestException as TwilioRestException;
 use Twilio\Rest\Client;
 
 class ProcessMsgDelivery implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    /**
+     * Maximum attempts before the job is marked as failed.
+     */
+    public int $tries = 5;
+
+    /**
+     * Backoff schedule in seconds for retries (exponential-ish).
+     */
+    public function backoff(): array
+    {
+        return [60, 120, 300, 600];
+    }
 
     public int $deliveryId;
 
@@ -42,27 +57,19 @@ class ProcessMsgDelivery implements ShouldQueue
             return;
         }
 
-        try {
-            switch ($delivery->channel) {
-                case 'email':
-                    $this->sendEmail($delivery);
-                    break;
-                case 'sms':
-                    $this->sendSms($delivery);
-                    break;
-                default:
-                    $delivery->update([
-                        'status' => 'failed',
-                        'error' => 'channel not implemented',
-                        'failed_at' => now(),
-                    ]);
-            }
-        } catch (\Throwable $e) {
-            $delivery->update([
-                'status' => 'failed',
-                'error' => $e->getMessage(),
-                'failed_at' => now(),
-            ]);
+        switch ($delivery->channel) {
+            case 'email':
+                $this->sendEmail($delivery);
+                break;
+            case 'sms':
+                $this->sendSms($delivery);
+                break;
+            default:
+                $delivery->update([
+                    'status' => 'failed',
+                    'error' => 'channel not implemented',
+                    'failed_at' => now(),
+                ]);
         }
     }
 
@@ -99,15 +106,33 @@ class ProcessMsgDelivery implements ShouldQueue
         $subject = $this->replaceTokens($message->subject ?? '', $recipientName);
         $body = $this->replaceTokens($message->body ?? '', $recipientName);
 
-        // Send raw email for now; can be swapped for a Mailable later.
-        Mail::raw($body, function ($mail) use ($email, $subject) {
-            $mail->to($email)->subject($subject);
-        });
+        try {
+            // Send raw email for now; can be swapped for a Mailable later.
+            Mail::raw($body, function ($mail) use ($email, $subject) {
+                $mail->to($email)->subject($subject);
+            });
 
-        $delivery->update([
-            'status' => 'sent',
-            'sent_at' => now(),
-        ]);
+            $delivery->update([
+                'status' => 'sent',
+                'sent_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            $ctx = $this->logCtx($delivery, 'email');
+            Log::warning('Email send error', $ctx + ['error' => $e->getMessage()]);
+
+            if ($this->isTransientException($e)) {
+                // Release for retry using backoff
+                $this->release($this->nextBackoffSeconds());
+                return;
+            }
+
+            // Permanent error: mark failed and stop retrying
+            $delivery->update([
+                'status' => 'failed',
+                'error' => $e->getMessage(),
+                'failed_at' => now(),
+            ]);
+        }
     }
 
     protected function sendSms(MsgDelivery $delivery): void
@@ -186,18 +211,50 @@ class ProcessMsgDelivery implements ShouldQueue
             return;
         }
 
-        $client = new Client($sid, $token);
-        $body = $this->replaceTokens($message->body ?? '', $recipientName);
-        $twilioMessage = $client->messages->create($to, [
-            'from' => $from,
-            'body' => $body,
-        ]);
+        try {
+            $client = new Client($sid, $token);
+            $body = $this->replaceTokens($message->body ?? '', $recipientName);
+            $twilioMessage = $client->messages->create($to, [
+                'from' => $from,
+                'body' => $body,
+            ]);
 
-        $delivery->update([
-            'status' => 'sent',
-            'provider_message_id' => $twilioMessage->sid ?? null,
-            'sent_at' => now(),
-        ]);
+            $delivery->update([
+                'status' => 'sent',
+                'provider_message_id' => $twilioMessage->sid ?? null,
+                'sent_at' => now(),
+            ]);
+        } catch (TwilioRestException $e) {
+            $ctx = $this->logCtx($delivery, 'sms');
+            $code = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : null;
+            Log::warning('Twilio REST error', $ctx + ['error' => $e->getMessage(), 'status_code' => $code]);
+
+            if ($this->isTransientTwilioStatus($code)) {
+                $this->release($this->nextBackoffSeconds());
+                return;
+            }
+
+            // Permanent error from Twilio: mark failed, include code
+            $delivery->update([
+                'status' => 'failed',
+                'error' => trim(($code ? "$code: " : '') . $e->getMessage()),
+                'failed_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            $ctx = $this->logCtx($delivery, 'sms');
+            Log::error('SMS send unexpected error', $ctx + ['error' => $e->getMessage()]);
+
+            if ($this->isTransientException($e)) {
+                $this->release($this->nextBackoffSeconds());
+                return;
+            }
+
+            $delivery->update([
+                'status' => 'failed',
+                'error' => $e->getMessage(),
+                'failed_at' => now(),
+            ]);
+        }
     }
 
     /**
@@ -217,5 +274,75 @@ class ProcessMsgDelivery implements ShouldQueue
             '{{Name}}' => $name,
         ];
         return strtr($text, $replacements);
+    }
+
+    /**
+     * Build a standard logging context for this job/delivery.
+     */
+    protected function logCtx(MsgDelivery $delivery, string $channel): array
+    {
+        return [
+            'delivery_id' => $delivery->id,
+            'channel' => $channel,
+            'attempt' => method_exists($this, 'attempts') ? $this->attempts() : null,
+            'team_id' => $delivery->team_id,
+            'recipient_type' => $delivery->recipient_type,
+            'recipient_id' => $delivery->recipient_id,
+        ];
+    }
+
+    /**
+     * Determine if an exception is likely transient (network/timeouts, 5xx, rate limits).
+     */
+    protected function isTransientException(\Throwable $e): bool
+    {
+        $msg = strtolower($e->getMessage());
+        if (str_contains($msg, 'timeout') || str_contains($msg, 'connection') || str_contains($msg, 'temporarily')) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Decide Twilio HTTP status codes that should be retried.
+     */
+    protected function isTransientTwilioStatus(?int $status): bool
+    {
+        if ($status === null) return true; // be conservative and retry once if unknown
+        if ($status === 429) return true; // rate limited
+        if ($status >= 500) return true; // server errors
+        return false; // 4xx are permanent (auth/validation)
+    }
+
+    /**
+     * Compute the next backoff seconds based on current attempt.
+     */
+    protected function nextBackoffSeconds(): int
+    {
+        $schedule = $this->backoff();
+        $attempt = max(1, (int) (method_exists($this, 'attempts') ? $this->attempts() : 1));
+        // attempts() starts at 1; map to index (attempt-1), clamp to last value
+        $idx = min($attempt - 1, count($schedule) - 1);
+        return (int) $schedule[$idx];
+    }
+
+    /**
+     * Called when the job has exhausted all retries.
+     */
+    public function failed(\Throwable $e): void
+    {
+        $delivery = MsgDelivery::query()->find($this->deliveryId);
+        if (! $delivery) return;
+
+        // Only set failed if not already marked sent/skipped/failed
+        if ($delivery->status === 'queued' || $delivery->status === 'sending') {
+            $delivery->update([
+                'status' => 'failed',
+                'error' => $e->getMessage(),
+                'failed_at' => now(),
+            ]);
+        }
+
+        Log::error('ProcessMsgDelivery exhausted retries', $this->logCtx($delivery, (string) $delivery->channel) + ['error' => $e->getMessage()]);
     }
 }

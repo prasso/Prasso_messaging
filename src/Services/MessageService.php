@@ -15,11 +15,11 @@ class MessageService
 
     public function __construct()
     {
-        $this->twilioNumber = config('services.twilio.phone_number');
-        $this->twilio = new TwilioClient(
-            config('services.twilio.sid'),
-            config('services.twilio.auth_token')
-        );
+        // Align with ProcessMsgDelivery: prefer config('twilio.*') with env fallbacks
+        $sid = config('twilio.sid') ?: env('TWILIO_ACCOUNT_SID');
+        $token = config('twilio.auth_token') ?: env('TWILIO_AUTH_TOKEN');
+        $this->twilioNumber = config('twilio.phone_number') ?: env('TWILIO_PHONE_NUMBER');
+        $this->twilio = new TwilioClient($sid, $token);
     }
 
     public function sendSms(MsgGuest $recipient, string $message, array $options = [])
