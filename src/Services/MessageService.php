@@ -86,10 +86,10 @@ class MessageService
             'msg_message_id' => $msg->id,
             'recipient_type' => MsgGuest::class,
             'recipient_id' => $recipient->id,
-            'status' => 'delivered',
-            'external_id' => $messageSid,
+            'status' => 'sent',
+            'provider_message_id' => $messageSid,
             'sent_at' => now(),
-            'delivered_at' => now()
+            'delivered_at' => null
         ]);
     }
 

@@ -102,6 +102,7 @@ class ProcessMsgDelivery implements ShouldQueue
 
         // Resolve recipient phone
         $phone = null;
+        $isSubscribed = true;
         if ($delivery->recipient_type === 'user') {
             $userModel = config('messaging.user_model');
             if (class_exists($userModel)) {
@@ -111,12 +112,25 @@ class ProcessMsgDelivery implements ShouldQueue
         } elseif ($delivery->recipient_type === 'guest') {
             $guest = MsgGuest::query()->find($delivery->recipient_id);
             $phone = $guest?->phone;
+            // Enforce consent for guests
+            if ($guest && property_exists($guest, 'is_subscribed') && $guest->is_subscribed === false) {
+                $isSubscribed = false;
+            }
         }
 
         if (empty($phone)) {
             $delivery->update([
                 'status' => 'failed',
                 'error' => 'missing phone',
+                'failed_at' => now(),
+            ]);
+            return;
+        }
+
+        if (! $isSubscribed) {
+            $delivery->update([
+                'status' => 'skipped',
+                'error' => 'unsubscribed recipient',
                 'failed_at' => now(),
             ]);
             return;
@@ -135,8 +149,9 @@ class ProcessMsgDelivery implements ShouldQueue
         // Normalize phone numbers to E.164 if possible (prepend '+' when missing)
         $to = str_starts_with($phone, '+') ? $phone : ('+' . preg_replace('/\D+/', '', $phone));
 
-        $sid = config('app.twilio_sid') ?: env('TWILIO_ACCOUNT_SID');
-        $token = config('app.twilio_token') ?: env('TWILIO_AUTH_TOKEN');
+        // Standardize Twilio config usage
+        $sid = config('twilio.sid') ?: env('TWILIO_ACCOUNT_SID');
+        $token = config('twilio.auth_token') ?: env('TWILIO_AUTH_TOKEN');
         if (empty($sid) || empty($token)) {
             $delivery->update([
                 'status' => 'failed',

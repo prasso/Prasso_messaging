@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;use Prasso\Messaging\Models\MsgMessage;
 use Prasso\Messaging\Models\MsgDelivery;
 use Prasso\Messaging\Services\RecipientResolver;
 use Prasso\Messaging\Jobs\ProcessMsgDelivery;
+use Prasso\Messaging\Models\MsgGuest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -351,6 +352,13 @@ class MessageController extends Controller
                 return ['skipped', 'missing email'];
             case 'sms':
                 if (!empty($recipient['phone'])) {
+                    // If recipient is a guest, enforce subscription status
+                    if (($recipient['recipient_type'] ?? null) === 'guest') {
+                        $guest = MsgGuest::query()->find($recipient['recipient_id']);
+                        if ($guest && $guest->is_subscribed === false) {
+                            return ['skipped', 'unsubscribed'];
+                        }
+                    }
                     return ['queued', null];
                 }
                 return ['skipped', 'missing phone'];

@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use Prasso\Messaging\Http\Controllers\Api\TwilioWebhookController;
+use Prasso\Messaging\Http\Controllers\Api\TwilioStatusWebhookController;
+use Prasso\Messaging\Http\Middleware\VerifyTwilioSignature;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,6 +16,12 @@ use Prasso\Messaging\Http\Controllers\Api\TwilioWebhookController;
 |
 */
 
-// Twilio Webhook Endpoint
+// Twilio Inbound Message Webhook (secured with signature validation)
 Route::post('/webhooks/twilio', [TwilioWebhookController::class, 'handleIncomingMessage'])
+    ->middleware(VerifyTwilioSignature::class)
     ->name('webhooks.twilio');
+
+// Twilio Status Callback Webhook (DLR)
+Route::post('/webhooks/twilio/status', [TwilioStatusWebhookController::class, 'handleStatus'])
+    ->middleware(VerifyTwilioSignature::class)
+    ->name('webhooks.twilio.status');
