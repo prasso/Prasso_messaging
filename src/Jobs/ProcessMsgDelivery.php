@@ -35,6 +35,12 @@ class ProcessMsgDelivery implements ShouldQueue
             return;
         }
 
+        // Respect scheduling: if send_at is in the future, release the job until due
+        if ($delivery->send_at && now()->lt($delivery->send_at)) {
+            $this->release(now()->diffInSeconds($delivery->send_at));
+            return;
+        }
+
         try {
             switch ($delivery->channel) {
                 case 'email':
@@ -65,15 +71,18 @@ class ProcessMsgDelivery implements ShouldQueue
 
         // Resolve recipient email
         $email = null;
+        $recipientName = null;
         if ($delivery->recipient_type === 'user') {
             $userModel = config('messaging.user_model');
             if (class_exists($userModel)) {
                 $user = $userModel::query()->find($delivery->recipient_id);
                 $email = $user?->email;
+                $recipientName = $user?->name ?? null;
             }
         } elseif ($delivery->recipient_type === 'guest') {
             $guest = MsgGuest::query()->find($delivery->recipient_id);
             $email = $guest?->email;
+            $recipientName = $guest?->name ?? null;
         }
 
         if (empty($email)) {
@@ -85,9 +94,13 @@ class ProcessMsgDelivery implements ShouldQueue
             return;
         }
 
+        // Simple templating
+        $subject = $this->replaceTokens($message->subject ?? '', $recipientName);
+        $body = $this->replaceTokens($message->body ?? '', $recipientName);
+
         // Send raw email for now; can be swapped for a Mailable later.
-        Mail::raw($message->body, function ($mail) use ($email, $message) {
-            $mail->to($email)->subject($message->subject ?? '');
+        Mail::raw($body, function ($mail) use ($email, $subject) {
+            $mail->to($email)->subject($subject);
         });
 
         $delivery->update([
@@ -103,15 +116,18 @@ class ProcessMsgDelivery implements ShouldQueue
         // Resolve recipient phone
         $phone = null;
         $isSubscribed = true;
+        $recipientName = null;
         if ($delivery->recipient_type === 'user') {
             $userModel = config('messaging.user_model');
             if (class_exists($userModel)) {
                 $user = $userModel::query()->find($delivery->recipient_id);
                 $phone = $user?->getAttribute('phone');
+                $recipientName = $user?->name ?? null;
             }
         } elseif ($delivery->recipient_type === 'guest') {
             $guest = MsgGuest::query()->find($delivery->recipient_id);
             $phone = $guest?->phone;
+            $recipientName = $guest?->name ?? null;
             // Enforce consent for guests
             if ($guest && property_exists($guest, 'is_subscribed') && $guest->is_subscribed === false) {
                 $isSubscribed = false;
@@ -162,9 +178,10 @@ class ProcessMsgDelivery implements ShouldQueue
         }
 
         $client = new Client($sid, $token);
+        $body = $this->replaceTokens($message->body ?? '', $recipientName);
         $twilioMessage = $client->messages->create($to, [
             'from' => $from,
-            'body' => $message->body,
+            'body' => $body,
         ]);
 
         $delivery->update([
@@ -172,5 +189,24 @@ class ProcessMsgDelivery implements ShouldQueue
             'provider_message_id' => $twilioMessage->sid ?? null,
             'sent_at' => now(),
         ]);
+    }
+
+    /**
+     * Perform simple token replacement on message text.
+     * Supports {{FirstName}} and {{Name}} using recipient's name when available.
+     */
+    protected function replaceTokens(string $text, ?string $recipientName): string
+    {
+        if ($text === '') {
+            return $text;
+        }
+        $name = trim((string) ($recipientName ?? ''));
+        $firstName = $name !== '' ? preg_split('/\s+/', $name)[0] : '';
+        $replacements = [
+            '{{FirstName}}' => $firstName,
+            '{{First Name}}' => $firstName,
+            '{{Name}}' => $name,
+        ];
+        return strtr($text, $replacements);
     }
 }

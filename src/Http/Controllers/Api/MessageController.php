@@ -10,6 +10,7 @@ use Prasso\Messaging\Jobs\ProcessMsgDelivery;
 use Prasso\Messaging\Models\MsgGuest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Carbon\Carbon;
 
 class MessageController extends Controller
 {
@@ -280,6 +281,7 @@ class MessageController extends Controller
             'guest_ids.*' => 'integer|exists:msg_guests,id',
             'user_ids' => 'array',
             'user_ids.*' => 'integer|exists:users,id',
+            'send_at' => 'nullable|date',
         ]);
 
         if (empty($validatedData['guest_ids'] ?? []) && empty($validatedData['user_ids'] ?? [])) {
@@ -302,7 +304,15 @@ class MessageController extends Controller
 
         $queued = 0;
         $skipped = 0;
+        $batchSize = (int) config('messaging.rate_limit.batch_size', 50);
+        $batchInterval = (int) config('messaging.rate_limit.batch_interval_seconds', 1);
+        $baseDelaySeconds = 0;
+        if (!empty($validatedData['send_at'])) {
+            $sendAt = Carbon::parse($validatedData['send_at']);
+            $baseDelaySeconds = max(0, now()->diffInSeconds($sendAt, false));
+        }
 
+        $i = 0;
         foreach ($recipients as $recipient) {
             [$status, $error] = $this->determineStatusForChannel($message->type, $recipient);
 
@@ -313,6 +323,7 @@ class MessageController extends Controller
                 'channel' => $message->type,
                 'status' => $status,
                 'error' => $error,
+                'send_at' => !empty($validatedData['send_at']) ? Carbon::parse($validatedData['send_at']) : null,
                 'metadata' => [
                     'subject' => $message->subject,
                     'preview' => mb_substr($message->body, 0, 120),
@@ -320,11 +331,14 @@ class MessageController extends Controller
             ]);
 
             if ($status === 'queued') {
-                ProcessMsgDelivery::dispatch($delivery->id);
+                $batchOffset = $batchSize > 0 ? intdiv($i, $batchSize) : 0;
+                $delaySeconds = $baseDelaySeconds + ($batchOffset * $batchInterval);
+                ProcessMsgDelivery::dispatch($delivery->id)->delay(now()->addSeconds($delaySeconds));
                 $queued++;
             } else {
                 $skipped++;
             }
+            $i++;
         }
 
         return response()->json([

@@ -10,6 +10,14 @@ return [
     // Default SMS from number, typically a Twilio number in E.164 format
     'sms_from' => env('TWILIO_NUMBER'),
 
+    // Rate limiting settings (basic caps; can be overridden per-tenant later)
+    'rate_limit' => [
+        // Max items per batch when dispatching queued deliveries
+        'batch_size' => (int) env('MESSAGING_BATCH_SIZE', 50),
+        // Seconds to wait between batches
+        'batch_interval_seconds' => (int) env('MESSAGING_BATCH_INTERVAL', 1),
+    ],
+
     // Compliance/HELP defaults (can be overridden per tenant later)
     'help' => [
         'business_name' => env('MESSAGING_HELP_BUSINESS', config('app.name', 'Your Organization')),

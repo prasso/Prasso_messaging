@@ -20,6 +20,7 @@ class MsgDelivery extends Model
         'provider_message_id',
         'error',
         'metadata',
+        'send_at',
         'sent_at',
         'delivered_at',
         'failed_at',
@@ -27,6 +28,7 @@ class MsgDelivery extends Model
 
     protected $casts = [
         'metadata' => 'array',
+        'send_at' => 'datetime',
         'sent_at' => 'datetime',
         'delivered_at' => 'datetime',
         'failed_at' => 'datetime',
