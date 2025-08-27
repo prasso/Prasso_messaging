@@ -16,6 +16,13 @@ return [
         'batch_size' => (int) env('MESSAGING_BATCH_SIZE', 50),
         // Seconds to wait between batches
         'batch_interval_seconds' => (int) env('MESSAGING_BATCH_INTERVAL', 1),
+        // Per-guest frequency governance
+        // Typical guidance: 1–4 messages per month per subscriber
+        'per_guest_monthly_cap' => (int) env('MESSAGING_PER_GUEST_MONTHLY_CAP', 4),
+        // Sliding window size in days used for per-guest cap counting (defaults to 30)
+        'per_guest_window_days' => (int) env('MESSAGING_PER_GUEST_WINDOW_DAYS', 30),
+        // Allow transactional messages (metadata.type === 'transactional') to bypass per-guest cap
+        'allow_transactional_bypass' => (bool) env('MESSAGING_ALLOW_TRANSACTIONAL_BYPASS', true),
     ],
 
     // Compliance/HELP defaults (can be overridden per tenant later)

@@ -30,7 +30,14 @@ This document summarizes the A2P 10DLC compliance features implemented in the `p
   - Opt-out keywords now include `OPTOUT` (`config/twilio.php`).
   - HELP handling now includes `?` in addition to `HELP`, `INFO`, `SUPPORT` (`TwilioWebhookController::handleIncomingMessage()`).
   - Opt-in keywords list deduplicated to remove duplicate `UNSTOP` (`config/twilio.php`).
-    - Ensures message stays within Twilio's ~1600 char limit and logs GSM/UCS-2 segment estimate.
+
+- **Per-subscriber rate/frequency governance**
+  - Enforces a rolling cap of messages per subscriber within a window.
+  - Defaults: `per_guest_monthly_cap=4`, `per_guest_window_days=30` (`config/messaging.php` → `rate_limit`).
+  - Bypass/overrides:
+    - Transactional bypass when `delivery.metadata.type === 'transactional'` and `allow_transactional_bypass=true`.
+    - Explicit overrides via `delivery.metadata.override_frequency=true` or `delivery.metadata.override_until` (ISO timestamp).
+  - Enforcement location: `src/Jobs/ProcessMsgDelivery.php` inside `sendSms()` before Twilio send.
 
 - **Inbound keyword handling and consent logging** (pre-existing, verified)
   - Opt-in/Opt-out/Help keywords in `config/twilio.php`.

@@ -34,6 +34,9 @@ See Milestone 5 (Reliability — Retries, Backoff, Logging, Config Alignment):
   - `MESSAGING_BATCH_INTERVAL` (default: 1)
   - `TWILIO_NUMBER` (historical); prefer `TWILIO_PHONE_NUMBER` and `config('twilio.phone_number')`
   - `MESSAGING_HELP_BUSINESS`, `MESSAGING_HELP_PURPOSE`, `MESSAGING_HELP_PHONE`, `MESSAGING_HELP_EMAIL`, `MESSAGING_HELP_WEBSITE`, `MESSAGING_HELP_DISCLAIMER`
+  - `MESSAGING_PER_GUEST_MONTHLY_CAP` (default: 4)
+  - `MESSAGING_PER_GUEST_WINDOW_DAYS` (default: 30)
+  - `MESSAGING_ALLOW_TRANSACTIONAL_BYPASS` (default: true)
 
 For per‑team overrides (Milestone 4), configure rows in `msg_team_settings` for each `team_id`.
 
@@ -71,3 +74,13 @@ For per‑team overrides (Milestone 4), configure rows in `msg_team_settings` fo
 
 - **Footer behavior**
   - All outbound SMS get a compliance footer (business ID, “Reply STOP to unsubscribe”, disclaimer, optional contact). Values are sourced from `msg_team_settings` when present, otherwise from `config/messaging.php`.
+
+- **Rate/Frequency governance**
+  - Per‑subscriber cap enforced in `ProcessMsgDelivery::sendSms()` using a rolling window.
+  - Configure in `config/messaging.php` → `rate_limit` or via env:
+    - `per_guest_monthly_cap` (`MESSAGING_PER_GUEST_MONTHLY_CAP`, default 4)
+    - `per_guest_window_days` (`MESSAGING_PER_GUEST_WINDOW_DAYS`, default 30)
+    - `allow_transactional_bypass` (`MESSAGING_ALLOW_TRANSACTIONAL_BYPASS`, default true)
+  - Overrides per delivery via metadata:
+    - `type: transactional` to bypass when allowed
+    - `override_frequency: true` or `override_until: <ISO timestamp>`

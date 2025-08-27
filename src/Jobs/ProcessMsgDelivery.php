@@ -178,6 +178,50 @@ class ProcessMsgDelivery implements ShouldQueue
             return;
         }
 
+        // Per-guest frequency governance (cap messages in a rolling window)
+        $rateCfg = (array) config('messaging.rate_limit', []);
+        $cap = (int) ($rateCfg['per_guest_monthly_cap'] ?? 0);
+        $windowDays = (int) ($rateCfg['per_guest_window_days'] ?? 30);
+        $allowBypass = (bool) ($rateCfg['allow_transactional_bypass'] ?? true);
+        $isTransactional = strtolower((string) ($delivery->metadata['type'] ?? '')) === 'transactional';
+        $overrideAlways = (bool) ($delivery->metadata['override_frequency'] ?? false);
+        $overrideUntil = $delivery->metadata['override_until'] ?? null; // ISO string or timestamp
+        $overrideActive = false;
+        if (!empty($overrideUntil)) {
+            try {
+                $overrideActive = now()->lt(\Carbon\Carbon::parse($overrideUntil));
+            } catch (\Throwable $e) {
+                $overrideActive = false;
+            }
+        }
+        if ($cap > 0 && $windowDays > 0 && !($allowBypass && $isTransactional) && !($overrideAlways || $overrideActive)) {
+            $windowStart = now()->subDays($windowDays);
+            $priorCount = MsgDelivery::query()
+                ->where('channel', 'sms')
+                ->where('status', 'sent')
+                ->where('team_id', $delivery->team_id)
+                ->where('recipient_type', $delivery->recipient_type)
+                ->where('recipient_id', $delivery->recipient_id)
+                ->whereNot('id', $delivery->id)
+                ->where('sent_at', '>=', $windowStart)
+                ->count();
+
+            if ($priorCount >= $cap) {
+                $ctx = $this->logCtx($delivery, 'sms');
+                Log::info('Per-guest frequency cap reached; skipping SMS', $ctx + [
+                    'cap' => $cap,
+                    'window_days' => $windowDays,
+                    'prior_count' => $priorCount,
+                ]);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'per-guest frequency cap reached',
+                    'failed_at' => now(),
+                ]);
+                return;
+            }
+        }
+
         // Determine from number with precedence: delivery metadata -> team settings -> app config
         $from = $delivery->metadata['from'] ?? null;
         if (empty($from) && !empty($delivery->team_id)) {
