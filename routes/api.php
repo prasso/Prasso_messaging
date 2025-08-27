@@ -11,6 +11,12 @@ use Prasso\Messaging\Http\Controllers\Api\AlertController;
 use Prasso\Messaging\Http\Controllers\Api\EventController;
 use Prasso\Messaging\Http\Controllers\Api\VoiceBroadcastController;
 use Prasso\Messaging\Http\Controllers\Api\InboundMessageController;
+use Prasso\Messaging\Http\Controllers\Api\ConsentController;
+
+// Public endpoint for web form opt-in (no auth)
+Route::prefix('api')->group(function () {
+    Route::post('/consents/opt-in-web', [ConsentController::class, 'optInWeb']);
+});
 
 Route::middleware(['api','auth:sanctum'])->prefix('api')->group(function () {
 
