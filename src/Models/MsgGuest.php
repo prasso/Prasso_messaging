@@ -32,7 +32,7 @@ class MsgGuest extends Model
     ];
 
     protected $attributes = [
-        'is_subscribed' => true // Default to opted-in
+        'is_subscribed' => false // Default to pending (unsubscribed) until confirmed
     ];
 
     public function messages()
