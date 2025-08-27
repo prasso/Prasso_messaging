@@ -12,6 +12,7 @@ use Prasso\Messaging\Http\Controllers\Api\EventController;
 use Prasso\Messaging\Http\Controllers\Api\VoiceBroadcastController;
 use Prasso\Messaging\Http\Controllers\Api\InboundMessageController;
 use Prasso\Messaging\Http\Controllers\Api\ConsentController;
+use Prasso\Messaging\Http\Controllers\Api\PrivacyController;
 
 // Public endpoint for web form opt-in (no auth)
 Route::prefix('api')->group(function () {
@@ -89,5 +90,11 @@ Route::post('/voice-broadcasts/send', [VoiceBroadcastController::class, 'send'])
 // Inbound messages listing and CSV export
 Route::get('/inbound-messages', [InboundMessageController::class, 'index']);
 Route::get('/inbound-messages/export', [InboundMessageController::class, 'exportCsv']);
+
+// Privacy & Deletion (admin)
+Route::post('/guests/{id}/privacy/dnc', [PrivacyController::class, 'markDoNotContact']);
+Route::delete('/guests/{id}/privacy/dnc', [PrivacyController::class, 'clearDoNotContact']);
+Route::post('/guests/{id}/privacy/anonymize', [PrivacyController::class, 'anonymize']);
+Route::delete('/guests/{id}/privacy', [PrivacyController::class, 'destroy']);
 
 });

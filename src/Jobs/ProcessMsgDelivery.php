@@ -158,6 +158,23 @@ class ProcessMsgDelivery implements ShouldQueue
             if ($guest && property_exists($guest, 'is_subscribed') && $guest->is_subscribed === false) {
                 $isSubscribed = false;
             }
+            // Respect privacy flags: do-not-contact and anonymized
+            if ($guest && (bool) ($guest->do_not_contact ?? false)) {
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'do-not-contact',
+                    'failed_at' => now(),
+                ]);
+                return;
+            }
+            if ($guest && !is_null($guest->anonymized_at ?? null)) {
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'anonymized recipient',
+                    'failed_at' => now(),
+                ]);
+                return;
+            }
         }
 
         if (empty($phone)) {

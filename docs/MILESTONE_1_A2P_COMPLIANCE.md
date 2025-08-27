@@ -84,6 +84,8 @@ Consent event fields:
 - SMS to a guest with `is_subscribed=false` is skipped at controller and job levels.
 - Inbound START re-enables sending by flipping `is_subscribed=true`.
 
+Note: Outbound SMS sent via `ProcessMsgDelivery` auto-append a compliance footer (business ID, "Reply STOP to unsubscribe", disclaimer). To avoid duplication, message samples and templates may omit explicit STOP lines.
+
 ## Setup checklist
 - [ ] Configure env vars (Twilio + HELP fields if desired)
 - [ ] Run `php artisan migrate`

@@ -84,3 +84,21 @@ For per‑team overrides (Milestone 4), configure rows in `msg_team_settings` fo
   - Overrides per delivery via metadata:
     - `type: transactional` to bypass when allowed
     - `override_frequency: true` or `override_until: <ISO timestamp>`
+
+## Privacy & Deletion (Admin API)
+
+- Fields on `msg_guests`:
+  - `do_not_contact` (boolean, default false)
+  - `anonymized_at` (timestamp, nullable)
+
+- Sending enforcement:
+  - `src/Jobs/ProcessMsgDelivery.php` skips SMS when `do_not_contact` is true or `anonymized_at` is set.
+
+- Endpoints (authenticated; see `routes/api.php` and `src/Http/Controllers/Api/PrivacyController.php`):
+  - `POST /api/guests/{id}/privacy/dnc` → mark do‑not‑contact and unsubscribe.
+  - `DELETE /api/guests/{id}/privacy/dnc` → clear do‑not‑contact.
+  - `POST /api/guests/{id}/privacy/anonymize` → anonymize PII (name/email/phone cleared and hashed fields null), mark DNC, set `anonymized_at`.
+  - `DELETE /api/guests/{id}/privacy` → delete guest (detaches messages and deletes engagement responses first).
+
+- Logging:
+  - Operations are logged via `Log::info`. Consider adding an audit table in your app for stricter compliance.

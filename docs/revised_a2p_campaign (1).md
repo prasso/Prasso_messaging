@@ -37,25 +37,27 @@ No
 
 ## Message Samples
 
+Note: The platform auto-appends a compliance footer to outbound SMS (business ID, "Reply STOP to unsubscribe", disclaimer). To avoid duplication, sample contents below omit explicit STOP instructions.
+
 ### Message Sample #1
 **Type**: Appointment Reminder
-**Content**: "Hi John, this is ABC Dental. Your appointment is scheduled for March 15 at 2:00 PM. Reply CONFIRM to confirm or call (555) 123-4567. Reply STOP to opt out."
+**Content**: "Hi John, this is ABC Dental. Your appointment is scheduled for March 15 at 2:00 PM. Reply CONFIRM to confirm or call (555) 123-4567."
 
 ### Message Sample #2
 **Type**: Order Notification
-**Content**: "Your order #12345 from XYZ Store has shipped! Track your package: bit.ly/track12345. Expected delivery: March 20. Reply STOP to unsubscribe."
+**Content**: "Your order #12345 from XYZ Store has shipped! Track your package: bit.ly/track12345. Expected delivery: March 20."
 
 ### Message Sample #3
 **Type**: Event Reminder
-**Content**: "Reminder: Community fundraiser tomorrow at 6 PM at City Hall. More info: bit.ly/event123. Reply STOP to opt out of future notifications."
+**Content**: "Reminder: Community fundraiser tomorrow at 6 PM at City Hall. More info: bit.ly/event123."
 
 ### Message Sample #4
 **Type**: Account Alert
-**Content**: "ABC Bank Alert: Your account balance is low ($25.50). Please add funds to avoid fees. Log in at bit.ly/login123. Reply STOP to unsubscribe."
+**Content**: "ABC Bank Alert: Your account balance is low ($25.50). Please add funds to avoid fees. Log in at bit.ly/login123."
 
 ### Message Sample #5
 **Type**: Survey Request
-**Content**: "Thank you for visiting our store! Please rate your experience 1-5 by replying with a number. Your feedback helps us improve. Reply STOP to opt out."
+**Content**: "Thank you for visiting our store! Please rate your experience 1-5 by replying with a number. Your feedback helps us improve."
 
 ## End User Consent
 

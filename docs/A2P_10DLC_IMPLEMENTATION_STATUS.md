@@ -39,6 +39,17 @@ This document summarizes the A2P 10DLC compliance features implemented in the `p
     - Explicit overrides via `delivery.metadata.override_frequency=true` or `delivery.metadata.override_until` (ISO timestamp).
   - Enforcement location: `src/Jobs/ProcessMsgDelivery.php` inside `sendSms()` before Twilio send.
 
+- **Privacy & Data Subject Requests (DSR)**
+  - New fields on guests: `do_not_contact` (boolean), `anonymized_at` (timestamp). Migration: `database/migrations/2025_08_27_223000_alter_msg_guests_add_privacy_fields.php`.
+  - Send enforcement: `ProcessMsgDelivery::sendSms()` skips when `do_not_contact=true` or `anonymized_at` is set.
+  - Admin API (all authenticated):
+    - `POST /api/guests/{id}/privacy/dnc` → mark do-not-contact (also unsubscribes).
+    - `DELETE /api/guests/{id}/privacy/dnc` → clear do-not-contact.
+    - `POST /api/guests/{id}/privacy/anonymize` → anonymize PII and mark DNC.
+    - `DELETE /api/guests/{id}/privacy` → delete the guest and related links.
+  - Controller: `src/Http/Controllers/Api/PrivacyController.php`.
+  - Routes: `routes/api.php`.
+
 - **Inbound keyword handling and consent logging** (pre-existing, verified)
   - Opt-in/Opt-out/Help keywords in `config/twilio.php`.
   - Processing in `src/Http/Controllers/Api/TwilioWebhookController.php`.
@@ -93,4 +104,4 @@ This document summarizes the A2P 10DLC compliance features implemented in the `p
 - Add throttling and CAPTCHA to `/api/consents/opt-in-web` to mitigate abuse.
 - Ensure keyword lists include all required variants (e.g., add "CONFIRM" for opt-in, "OPTOUT" for opt-out, and "?" for help) in `config/twilio.php`.
 - Optional: detect existing STOP line in message body to avoid duplicating the STOP instruction in the footer.
-- Document privacy/data erasure endpoint once implemented.
+- Consider adding audit-table logging for privacy ops beyond application logs.
