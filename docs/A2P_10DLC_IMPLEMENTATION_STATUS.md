@@ -25,6 +25,11 @@ This document summarizes the A2P 10DLC compliance features implemented in the `p
     - Business identification, STOP instruction, disclaimer, and optional contact.
     - Footer source: per-team `MsgTeamSetting` first, otherwise `config('messaging.help.*')`.
     - Helper methods: `buildSmsFooter()` and `applySmsFooterAndLimit()`.
+
+- **Keyword set updates**
+  - Opt-out keywords now include `OPTOUT` (`config/twilio.php`).
+  - HELP handling now includes `?` in addition to `HELP`, `INFO`, `SUPPORT` (`TwilioWebhookController::handleIncomingMessage()`).
+  - Opt-in keywords list deduplicated to remove duplicate `UNSTOP` (`config/twilio.php`).
     - Ensures message stays within Twilio's ~1600 char limit and logs GSM/UCS-2 segment estimate.
 
 - **Inbound keyword handling and consent logging** (pre-existing, verified)

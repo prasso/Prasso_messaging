@@ -69,7 +69,7 @@ class TwilioWebhookController
         } elseif (in_array($text, $optInKeywords, true)) {
             $this->handleOptIn($from, $request);
             $response->message('You are now subscribed to receive messages. Reply STOP to unsubscribe.');
-        } elseif ($text === 'HELP' || $text === 'INFO' || $text === 'SUPPORT') {
+        } elseif ($text === 'HELP' || $text === 'INFO' || $text === 'SUPPORT' || $text === '?') {
             $response->message($this->buildHelpMessage($teamId));
         } else {
             // Generic acknowledgement, maintain compliance hint
