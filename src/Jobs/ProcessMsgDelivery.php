@@ -213,7 +213,9 @@ class ProcessMsgDelivery implements ShouldQueue
 
         try {
             $client = new Client($sid, $token);
-            $body = $this->replaceTokens($message->body ?? '', $recipientName);
+            $baseBody = $this->replaceTokens($message->body ?? '', $recipientName);
+            $footer = $this->buildSmsFooter($delivery->team_id);
+            $body = $this->applySmsFooterAndLimit($baseBody, $footer, $this->logCtx($delivery, 'sms'));
             $twilioMessage = $client->messages->create($to, [
                 'from' => $from,
                 'body' => $body,
@@ -324,6 +326,77 @@ class ProcessMsgDelivery implements ShouldQueue
         // attempts() starts at 1; map to index (attempt-1), clamp to last value
         $idx = min($attempt - 1, count($schedule) - 1);
         return (int) $schedule[$idx];
+    }
+
+    /**
+     * Build a short compliance footer for SMS messages including business identification,
+     * STOP instructions, and disclaimer. Pull values from per-team settings when present,
+     * otherwise fall back to messaging config.
+     */
+    protected function buildSmsFooter(?int $teamId): string
+    {
+        $business = config('messaging.help.business_name', config('app.name', 'Your Organization'));
+        $disclaimer = config('messaging.help.disclaimer', 'Msg & data rates may apply.');
+        $contact = '';
+
+        if (!empty($teamId)) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $teamId)->first();
+            if ($teamCfg) {
+                if (!empty($teamCfg->help_business_name)) {
+                    $business = $teamCfg->help_business_name;
+                }
+                if (!empty($teamCfg->help_disclaimer)) {
+                    $disclaimer = $teamCfg->help_disclaimer;
+                }
+                // Prefer phone, then website, then email for a compact contact reference
+                $contact = $teamCfg->help_contact_phone
+                    ?: ($teamCfg->help_contact_website ?: ($teamCfg->help_contact_email ?: ''));
+            }
+        }
+
+        $parts = [];
+        // Business identification
+        $parts[] = $business;
+        // Mandatory STOP instruction
+        $parts[] = 'Reply STOP to unsubscribe';
+        // Disclaimer
+        if (!empty($disclaimer)) {
+            $parts[] = $disclaimer;
+        }
+        // Optional concise contact
+        if (!empty($contact)) {
+            $parts[] = $contact;
+        }
+
+        // Join with separators to keep concise; single line footer
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * Append footer and ensure message stays within Twilio's 1600-char hard limit.
+     * Log estimated segments for observability.
+     */
+    protected function applySmsFooterAndLimit(string $base, string $footer, array $logCtx): string
+    {
+        $joined = trim($base) !== '' ? (rtrim($base) . "\n" . $footer) : $footer;
+
+        // Twilio hard limit is ~1600 chars; trim if necessary
+        $max = 1600;
+        if (mb_strlen($joined, 'UTF-8') > $max) {
+            $joined = mb_substr($joined, 0, $max - 1, 'UTF-8') . '…';
+        }
+
+        // Rough segment estimation: GSM-7 uses 160 for 1 segment then 153, UCS-2 uses 70 then 67
+        $isUcs2 = (bool) preg_match('/[^\x00-\x7F]/u', $joined);
+        $len = mb_strlen($joined, 'UTF-8');
+        if ($isUcs2) {
+            $segments = $len <= 70 ? 1 : (int) ceil($len / 67);
+        } else {
+            $segments = $len <= 160 ? 1 : (int) ceil($len / 153);
+        }
+        Log::info('SMS length/segments', $logCtx + ['chars' => $len, 'ucs2' => $isUcs2, 'segments' => $segments]);
+
+        return $joined;
     }
 
     /**

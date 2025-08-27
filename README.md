@@ -36,3 +36,38 @@ See Milestone 5 (Reliability — Retries, Backoff, Logging, Config Alignment):
   - `MESSAGING_HELP_BUSINESS`, `MESSAGING_HELP_PURPOSE`, `MESSAGING_HELP_PHONE`, `MESSAGING_HELP_EMAIL`, `MESSAGING_HELP_WEBSITE`, `MESSAGING_HELP_DISCLAIMER`
 
 For per‑team overrides (Milestone 4), configure rows in `msg_team_settings` for each `team_id`.
+
+## Configuration
+
+- **Twilio Console Webhooks**
+  - Inbound messages: point to `POST /webhooks/twilio` (see `routes/web.php`).
+  - Delivery status (DLR): point to `POST /webhooks/twilio/status`.
+  - Signature validation: routes are protected by `VerifyTwilioSignature` middleware; ensure Twilio credentials are correct so signatures verify.
+
+- **Environment variables**
+  - Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`.
+  - Messaging help defaults (used in SMS footer/HELP response): set in `config/messaging.php` or via env
+    - `MESSAGING_HELP_BUSINESS`, `MESSAGING_HELP_DISCLAIMER`, plus optional `MESSAGING_HELP_PHONE`, `MESSAGING_HELP_EMAIL`, `MESSAGING_HELP_WEBSITE`.
+
+- **Per‑team settings (`msg_team_settings`)**
+  - Create a row per `team_id` with optional overrides:
+    - `sms_from` (sender number)
+    - `help_business_name`, `help_disclaimer`, `help_contact_phone`, `help_contact_email`, `help_contact_website`
+    - Optional rate limits: `rate_batch_size`, `rate_batch_interval_seconds`
+
+- **Public web opt‑in endpoint**
+  - Endpoint: `POST /api/consents/opt-in-web` (see `routes/api.php` and `src/Http/Controllers/Api/ConsentController.php`).
+  - Expected fields: `phone` (required), `consent_checkbox` (required, accepted), optional `name`, `email`, `source_url`, `team_id`.
+  - Security: consider adding throttling and CAPTCHA at the app level.
+
+- **Keywords** (`config/twilio.php`)
+  - Review and adjust lists:
+    - `opt_in_keywords` (e.g., `START`, `YES`, `UNSTOP`, optionally `CONFIRM`)
+    - `opt_out_keywords` (e.g., `STOP`, `UNSUBSCRIBE`, optionally `OPTOUT`)
+  - Help/INFO keywords are handled in the webhook controller; you can extend the set (e.g., add `?`).
+
+- **Migrations**
+  - Run `php artisan migrate` in your Laravel app to apply package migrations, including the default change for `msg_guests.is_subscribed` (now defaults to false for double opt‑in).
+
+- **Footer behavior**
+  - All outbound SMS get a compliance footer (business ID, “Reply STOP to unsubscribe”, disclaimer, optional contact). Values are sourced from `msg_team_settings` when present, otherwise from `config/messaging.php`.
