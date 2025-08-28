@@ -4,23 +4,32 @@
     "type": "library",
     "license": "MIT",
     "require": {
-        "php": "^8.0",
-        "illuminate/support": "^9.0|^10.0|^11.0",
-        "filament/filament": "^3.0"
+      "php": "^8.0",
+      "illuminate/support": "^9.0|^10.0|^11.0",
+      "filament/filament": "^3.0"
     },
     "autoload": {
-        "psr-4": {
-            "Prasso\\Messaging\\": "src/"
-        }
+      "psr-4": {
+        "Prasso\\Messaging\\": "src/"
+      }
+    },
+    "autoload-dev": {
+      "psr-4": {
+        "Prasso\\Messaging\\Tests\\": "tests/"
+      }
     },
     "extra": {
-        "laravel": {
-            "providers": [
-                "Prasso\\Messaging\\MessagingServiceProvider"
-            ]
-        }
+      "laravel": {
+        "providers": [
+          "Prasso\\Messaging\\MessagingServiceProvider"
+        ]
+      }
+    },
+    "require-dev": {
+      "orchestra/testbench": "^8.0|^9.0",
+      "phpunit/phpunit": "^10.0|^11.0"
     },
     "minimum-stability": "dev",
     "prefer-stable": true
 
-}
+  }

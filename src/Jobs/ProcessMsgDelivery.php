@@ -154,8 +154,8 @@ class ProcessMsgDelivery implements ShouldQueue
             $guest = MsgGuest::query()->find($delivery->recipient_id);
             $phone = $guest?->phone;
             $recipientName = $guest?->name ?? null;
-            // Enforce consent for guests
-            if ($guest && property_exists($guest, 'is_subscribed') && $guest->is_subscribed === false) {
+            // Enforce consent for guests: pending/unsubscribed guests must be skipped
+            if ($guest && ($guest->is_subscribed ?? false) !== true) {
                 $isSubscribed = false;
             }
             // Respect privacy flags: do-not-contact and anonymized
@@ -189,7 +189,7 @@ class ProcessMsgDelivery implements ShouldQueue
         if (! $isSubscribed) {
             $delivery->update([
                 'status' => 'skipped',
-                'error' => 'unsubscribed recipient',
+                'error' => 'pending or unsubscribed recipient',
                 'failed_at' => now(),
             ]);
             return;
