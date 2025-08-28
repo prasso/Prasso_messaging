@@ -102,3 +102,25 @@ For per‑team overrides (Milestone 4), configure rows in `msg_team_settings` fo
 
 - Logging:
   - Operations are logged via `Log::info`. Consider adding an audit table in your app for stricter compliance.
+
+## Team Verification & Auditability
+
+- Fields on `msg_team_settings`:
+  - `verification_status` (verified | pending | rejected | suspended)
+  - `verified_at` (timestamp, nullable)
+  - `verification_notes` (text, nullable)
+
+- Enforcement:
+  - `src/Jobs/ProcessMsgDelivery.php` checks `team_id` on each delivery; if the team's `verification_status` is not `verified` (or settings missing), the send is skipped with `error='team not verified'`.
+
+- Audit table:
+  - `msg_team_verification_audits` records status changes: `team_id`, `status`, `notes`, `changed_by_user_id`, `created_at`.
+
+- Admin endpoints (authenticated; see `routes/api.php` and `src/Http/Controllers/Api/TeamVerificationController.php`):
+  - `GET /api/teams/{teamId}/verification/status` → current status/details
+  - `POST /api/teams/{teamId}/verification/status` → set status (`verified|pending|rejected|suspended`), optional `notes`
+  - `GET /api/teams/{teamId}/verification/audits` → list audit history
+
+- Workflow:
+  1. Admin sets status to `verified` when the team passes checks; `verified_at` auto-populates.
+  2. Any other status unsets `verified_at` and blocks outbound SMS from that team.

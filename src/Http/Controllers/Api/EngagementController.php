@@ -273,8 +273,8 @@ class EngagementController extends Controller
         }
 
         $response = new MsgEngagementResponse([
-            'engagement_id' => $id,
-            'guest_id' => $validatedData['guest_id'],
+            'msg_engagement_id' => $id,
+            'msg_guest_id' => $validatedData['guest_id'],
             'response' => $validatedData['response'],
         ]);
 

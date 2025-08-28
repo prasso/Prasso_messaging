@@ -15,17 +15,17 @@ class MsgEngagementResponse extends Model
 
     protected $table = 'msg_engagement_responses';
 
-    protected $fillable = ['engagement_id', 'guest_id', 'response'];
+    protected $fillable = ['msg_engagement_id', 'msg_guest_id', 'response'];
 
     // Relationships
 
     public function engagement()
     {
-        return $this->belongsTo(MsgEngagement::class, 'engagement_id');
+        return $this->belongsTo(MsgEngagement::class, 'msg_engagement_id');
     }
 
     public function guest()
     {
-        return $this->belongsTo(MsgGuest::class, 'guest_id');
+        return $this->belongsTo(MsgGuest::class, 'msg_guest_id');
     }
 }

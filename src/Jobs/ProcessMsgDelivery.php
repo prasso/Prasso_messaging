@@ -195,6 +195,25 @@ class ProcessMsgDelivery implements ShouldQueue
             return;
         }
 
+        // Team verification enforcement: require verified status before sending for a team
+        if (!empty($delivery->team_id)) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $delivery->team_id)->first();
+            $status = $teamCfg?->verification_status;
+            if (!$teamCfg || strtolower((string)$status) !== 'verified') {
+                $ctx = $this->logCtx($delivery, 'sms');
+                Log::info('Team not verified; skipping SMS', $ctx + [
+                    'team_id' => $delivery->team_id,
+                    'verification_status' => $status,
+                ]);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'team not verified',
+                    'failed_at' => now(),
+                ]);
+                return;
+            }
+        }
+
         // Per-guest frequency governance (cap messages in a rolling window)
         $rateCfg = (array) config('messaging.rate_limit', []);
         $cap = (int) ($rateCfg['per_guest_monthly_cap'] ?? 0);

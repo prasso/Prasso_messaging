@@ -13,6 +13,7 @@ use Prasso\Messaging\Http\Controllers\Api\VoiceBroadcastController;
 use Prasso\Messaging\Http\Controllers\Api\InboundMessageController;
 use Prasso\Messaging\Http\Controllers\Api\ConsentController;
 use Prasso\Messaging\Http\Controllers\Api\PrivacyController;
+use Prasso\Messaging\Http\Controllers\Api\TeamVerificationController;
 
 // Public endpoint for web form opt-in (no auth)
 Route::prefix('api')->group(function () {
@@ -96,5 +97,10 @@ Route::post('/guests/{id}/privacy/dnc', [PrivacyController::class, 'markDoNotCon
 Route::delete('/guests/{id}/privacy/dnc', [PrivacyController::class, 'clearDoNotContact']);
 Route::post('/guests/{id}/privacy/anonymize', [PrivacyController::class, 'anonymize']);
 Route::delete('/guests/{id}/privacy', [PrivacyController::class, 'destroy']);
+
+// Team Verification (admin)
+Route::get('/teams/{teamId}/verification/status', [TeamVerificationController::class, 'getStatus']);
+Route::post('/teams/{teamId}/verification/status', [TeamVerificationController::class, 'setStatus']);
+Route::get('/teams/{teamId}/verification/audits', [TeamVerificationController::class, 'listAudits']);
 
 });
