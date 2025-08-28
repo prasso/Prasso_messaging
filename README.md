@@ -32,7 +32,7 @@ See Milestone 5 (Reliability — Retries, Backoff, Logging, Config Alignment):
 - Optional (Messaging config overrides in `config/messaging.php`):
   - `MESSAGING_BATCH_SIZE` (default: 50)
   - `MESSAGING_BATCH_INTERVAL` (default: 1)
-  - `TWILIO_NUMBER` (historical); prefer `TWILIO_PHONE_NUMBER` and `config('twilio.phone_number')`
+  - `TWILIO_NUMBER` (legacy fallback) — prefer `TWILIO_PHONE_NUMBER` and `config('twilio.phone_number')`. `config('messaging.sms_from')` will use `TWILIO_PHONE_NUMBER` first, then fall back to `TWILIO_NUMBER` if not set.
   - `MESSAGING_HELP_BUSINESS`, `MESSAGING_HELP_PURPOSE`, `MESSAGING_HELP_PHONE`, `MESSAGING_HELP_EMAIL`, `MESSAGING_HELP_WEBSITE`, `MESSAGING_HELP_DISCLAIMER`
   - `MESSAGING_PER_GUEST_MONTHLY_CAP` (default: 4)
   - `MESSAGING_PER_GUEST_WINDOW_DAYS` (default: 30)
