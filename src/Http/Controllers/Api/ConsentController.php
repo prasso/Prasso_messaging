@@ -16,7 +16,7 @@ class ConsentController extends Controller
     /**
      * Accept web form opt-in submission and send double opt-in confirmation SMS.
      *
-     * Request fields: phone (required), name, email, checkbox (required true),
+     * Request fields: phone (required), name, email (required), checkbox (required true),
      * source_url, ip, ua, team_id
      */
     public function optInWeb(Request $request)
@@ -24,7 +24,7 @@ class ConsentController extends Controller
         $data = $request->validate([
             'phone' => 'required|string',
             'name' => 'nullable|string|max:255',
-            'email' => 'nullable|email|max:255',
+            'email' => 'required|email|max:255',
             // accept either `checkbox` or legacy `consent_checkbox`
             'checkbox' => 'nullable',
             'consent_checkbox' => 'nullable',
@@ -84,12 +84,7 @@ class ConsentController extends Controller
         // Provide reasonable fallbacks when absent from the form.
         // Always set name/email explicitly to avoid decrypting legacy/plaintext values
         $guest->name = !empty($data['name']) ? $data['name'] : 'SMS Guest';
-        if (!empty($data['email'])) {
-            $guest->email = $data['email'];
-        } else {
-            $hash = substr($phoneHash, 0, 12);
-            $guest->email = "guest+{$hash}@example.invalid";
-        }
+        $guest->email = $data['email'];
         if (!isset($guest->user_id)) {
             // Default unattached user reference for legacy schema
             $guest->user_id = 0;
@@ -145,8 +140,9 @@ class ConsentController extends Controller
                 $business = $teamCfg->help_business_name;
             }
         }
-        // Confirmation SMS copy derived from consent form language
-        $confirmation = "You're almost done! Reply YES to confirm your $business text notifications. You'll receive appointment reminders, service updates, and occasional offers. Reply STOP to opt out, HELP for help. Msg & data rates may apply.";
+        // Confirmation SMS copy derived from consent form language with monthly frequency disclosure
+        $cap = (int) config('messaging.rate_limit.per_guest_monthly_cap', 4);
+        $confirmation = "You're almost done! Reply YES to confirm your $business text notifications (up to {$cap} messages/month). You'll receive appointment reminders, service updates, and occasional offers. Reply STOP to opt out, HELP for help. Msg & data rates may apply.";
 
         try {
             app(SmsService::class)->send($guest->phone, $confirmation, $teamId);

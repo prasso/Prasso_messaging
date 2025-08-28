@@ -18,6 +18,123 @@ class TwilioWebhookControllerTest extends TestCase
     }
 
     /** @test */
+    public function join_keyword_confirms_only_with_recent_opt_in_request_and_logs_keyword(): void
+    {
+        $guest = MsgGuest::create([
+            'user_id' => 1,
+            'name' => 'Opt Join',
+            'email' => 'join@example.test',
+            'phone' => '+1 555 100 2000',
+            'is_subscribed' => false,
+        ]);
+
+        // No recent request -> should not subscribe
+        $resNoReq = $this->post('/webhooks/twilio', [
+            'From' => '+15551002000', 'To' => '+15005550006', 'Body' => 'JOIN', 'MessageSid' => 'SM_join1',
+        ], ['Accept' => 'text/xml']);
+        $resNoReq->assertStatus(200);
+        $guest->refresh();
+        $this->assertFalse((bool) $guest->is_subscribed);
+
+        // Create recent opt_in_request to satisfy 24h rule
+        \Prasso\Messaging\Models\MsgConsentEvent::create([
+            'team_id' => $guest->team_id,
+            'msg_guest_id' => $guest->id,
+            'action' => 'opt_in_request',
+            'method' => 'web',
+            'source' => 'phpunit',
+            'occurred_at' => now(),
+            'meta' => ['consent_checkbox' => true],
+        ]);
+
+        // Now JOIN should subscribe and log opt_in with keyword
+        $res = $this->post('/webhooks/twilio', [
+            'From' => '+15551002000', 'To' => '+15005550006', 'Body' => 'JOIN', 'MessageSid' => 'SM_join2',
+        ], ['Accept' => 'text/xml']);
+        $res->assertStatus(200);
+        $guest->refresh();
+        $this->assertTrue((bool) $guest->is_subscribed);
+        $evt = MsgConsentEvent::where('msg_guest_id', $guest->id)->where('action', 'opt_in')->latest('id')->first();
+        $this->assertNotNull($evt);
+        $this->assertSame('JOIN', strtoupper($evt->meta['keyword'] ?? ''));
+    }
+
+    /** @test */
+    public function stop_reply_includes_business_name_and_logs_keyword_meta(): void
+    {
+        $guest = MsgGuest::create([
+            'team_id' => 808,
+            'user_id' => 1,
+            'name' => 'Stop Me',
+            'email' => 'stop@example.test',
+            'phone' => '+1 555 300 4000',
+            'is_subscribed' => true,
+        ]);
+        MsgTeamSetting::create(['team_id' => 808, 'help_business_name' => 'Beta Biz']);
+
+        $res = $this->post('/webhooks/twilio', [
+            'From' => '+15553004000', 'To' => '+15005550006', 'Body' => 'STOP', 'MessageSid' => 'SM_stopBiz',
+        ], ['Accept' => 'text/xml']);
+
+        $res->assertStatus(200);
+        $xml = $res->getContent();
+        $this->assertStringContainsString('Beta Biz', $xml);
+
+        $evt = MsgConsentEvent::where('msg_guest_id', $guest->id)->where('action', 'opt_out')->latest('id')->first();
+        $this->assertNotNull($evt);
+        $this->assertSame('STOP', strtoupper($evt->meta['keyword'] ?? ''));
+    }
+
+    /** @test */
+    public function yes_requires_recent_opt_in_request_within_24h(): void
+    {
+        $guest = MsgGuest::create([
+            'user_id' => 1,
+            'name' => 'Yes Person',
+            'email' => 'yes@example.test',
+            'phone' => '+1 555 600 7000',
+            'is_subscribed' => false,
+        ]);
+
+        // Old request beyond 24h should not count
+        \Prasso\Messaging\Models\MsgConsentEvent::create([
+            'team_id' => $guest->team_id,
+            'msg_guest_id' => $guest->id,
+            'action' => 'opt_in_request',
+            'method' => 'web',
+            'source' => 'phpunit',
+            'occurred_at' => now()->subDays(2),
+            'meta' => ['consent_checkbox' => true],
+        ]);
+
+        $resOld = $this->post('/webhooks/twilio', [
+            'From' => '+15556007000', 'To' => '+15005550006', 'Body' => 'YES', 'MessageSid' => 'SM_yes_old',
+        ], ['Accept' => 'text/xml']);
+        $resOld->assertStatus(200);
+        $guest->refresh();
+        $this->assertFalse((bool) $guest->is_subscribed);
+
+        // Recent request -> YES should subscribe
+        \Prasso\Messaging\Models\MsgConsentEvent::create([
+            'team_id' => $guest->team_id,
+            'msg_guest_id' => $guest->id,
+            'action' => 'opt_in_request',
+            'method' => 'web',
+            'source' => 'phpunit',
+            'occurred_at' => now()->subHours(1),
+            'meta' => ['consent_checkbox' => true],
+        ]);
+        $resYes = $this->post('/webhooks/twilio', [
+            'From' => '+15556007000', 'To' => '+15005550006', 'Body' => 'YES', 'MessageSid' => 'SM_yes_new',
+        ], ['Accept' => 'text/xml']);
+        $resYes->assertStatus(200);
+        $guest->refresh();
+        $this->assertTrue((bool) $guest->is_subscribed);
+        $evt = MsgConsentEvent::where('msg_guest_id', $guest->id)->where('action', 'opt_in')->latest('id')->first();
+        $this->assertSame('YES', strtoupper($evt->meta['keyword'] ?? ''));
+    }
+
+    /** @test */
     public function stop_keyword_updates_guest_to_unsubscribed_and_logs_consent(): void
     {
         // Given a subscribed guest identified by phone_hash

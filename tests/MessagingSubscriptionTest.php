@@ -9,6 +9,7 @@ use Prasso\Messaging\Jobs\ProcessMsgDelivery;
 use Prasso\Messaging\Models\MsgDelivery;
 use Prasso\Messaging\Models\MsgGuest;
 use Prasso\Messaging\Models\MsgMessage;
+use Prasso\Messaging\Models\MsgConsentEvent;
 
 class MessagingSubscriptionTest extends TestCase
 {
@@ -59,6 +60,19 @@ class MessagingSubscriptionTest extends TestCase
             'email' => 'pending2@example.test',
             'phone' => '+15555550124',
             'is_subscribed' => false,
+        ]);
+
+        // Recent opt-in request within 24 hours to satisfy double opt-in rule
+        MsgConsentEvent::create([
+            'team_id' => $guest->team_id,
+            'msg_guest_id' => $guest->id,
+            'action' => 'opt_in_request',
+            'method' => 'web',
+            'source' => 'phpunit',
+            'ip' => '127.0.0.1',
+            'user_agent' => 'phpunit',
+            'occurred_at' => now(),
+            'meta' => ['consent_checkbox' => true],
         ]);
 
         // Build a fake Twilio inbound webhook request with YES

@@ -293,11 +293,23 @@ class ProcessMsgDelivery implements ShouldQueue
         }
 
         try {
-            $client = new Client($sid, $token);
+            $client = app()->bound(Client::class) ? app(Client::class) : new Client($sid, $token);
             $baseBody = $this->replaceTokens($message->body ?? '', $recipientName);
             $footer = $this->buildSmsFooter($delivery->team_id);
             $body = $this->applySmsFooterAndLimit($baseBody, $footer, $this->logCtx($delivery, 'sms'));
-            $twilioMessage = $client->messages->create($to, [
+            $messagesApi = null;
+            if (is_object($client)) {
+                // Prefer callable accessor on mocks, then property as fallback
+                if (method_exists($client, 'messages')) {
+                    $messagesApi = $client->messages();
+                } elseif (isset($client->messages) && is_object($client->messages)) {
+                    $messagesApi = $client->messages;
+                }
+            }
+            if (!$messagesApi) {
+                throw new \RuntimeException('Twilio messages API unavailable');
+            }
+            $twilioMessage = $messagesApi->create($to, [
                 'from' => $from,
                 'body' => $body,
             ]);
@@ -463,13 +475,20 @@ class ProcessMsgDelivery implements ShouldQueue
 
         // Twilio hard limit is ~1600 chars; trim if necessary
         $max = 1600;
-        if (mb_strlen($joined, 'UTF-8') > $max) {
-            $joined = mb_substr($joined, 0, $max - 1, 'UTF-8') . '…';
+        $hasMb = function_exists('mb_strlen') && function_exists('mb_substr');
+        $length = $hasMb ? mb_strlen($joined, 'UTF-8') : strlen($joined);
+        if ($length > $max) {
+            if ($hasMb) {
+                $joined = mb_substr($joined, 0, $max - 1, 'UTF-8') . '…';
+            } else {
+                $joined = substr($joined, 0, $max - 3) . '...';
+            }
+            $length = $hasMb ? mb_strlen($joined, 'UTF-8') : strlen($joined);
         }
 
         // Rough segment estimation: GSM-7 uses 160 for 1 segment then 153, UCS-2 uses 70 then 67
         $isUcs2 = (bool) preg_match('/[^\x00-\x7F]/u', $joined);
-        $len = mb_strlen($joined, 'UTF-8');
+        $len = $length;
         if ($isUcs2) {
             $segments = $len <= 70 ? 1 : (int) ceil($len / 67);
         } else {

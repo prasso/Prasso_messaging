@@ -64,11 +64,16 @@ class TwilioWebhookController
         $optInKeywords = array_map('strtoupper', (array) config('twilio.opt_in_keywords', []));
 
         if (in_array($text, $optOutKeywords, true)) {
-            $this->handleOptOut($from, $request);
-            $response->message('You have been unsubscribed and will no longer receive messages. Reply START to resubscribe.');
+            $this->handleOptOut($from, $request, $text);
+            $business = $this->resolveBusinessName($teamId);
+            $response->message("You've been unsubscribed from {$business} text alerts. No more messages will be sent. Reply START to resubscribe.");
         } elseif (in_array($text, $optInKeywords, true)) {
-            $this->handleOptIn($from, $request);
-            $response->message('You are now subscribed to receive messages. Reply STOP to unsubscribe.');
+            $subscribed = $this->handleOptIn($from, $request, $text);
+            if ($subscribed) {
+                $response->message('You are now subscribed to receive messages. Reply STOP to unsubscribe.');
+            } else {
+                $response->message('We could not verify a recent subscription request. Please submit the web form to opt in, then reply YES within 24 hours to confirm.');
+            }
         } elseif ($text === 'HELP' || $text === 'INFO' || $text === 'SUPPORT' || $text === '?') {
             $response->message($this->buildHelpMessage($teamId));
         } else {
@@ -79,7 +84,7 @@ class TwilioWebhookController
         return response((string) $response)->header('Content-Type', 'text/xml; charset=UTF-8');
     }
     
-    protected function handleOptOut($phoneNumber, Request $request = null)
+    protected function handleOptOut($phoneNumber, Request $request = null, ?string $keyword = null)
     {
         // Remove +1 if present and normalize
         $normalizedNumber = $this->normalizePhoneNumber($phoneNumber);
@@ -104,14 +109,14 @@ class TwilioWebhookController
                 'ip' => $request?->ip(),
                 'user_agent' => $request?->userAgent(),
                 'occurred_at' => now(),
-                'meta' => ['keyword' => 'STOP'],
+                'meta' => ['keyword' => $keyword ?: 'STOP'],
             ]);
         }
             
         Log::info("User opted out: $normalizedNumber");
     }
     
-    protected function handleOptIn($phoneNumber, Request $request = null)
+    protected function handleOptIn($phoneNumber, Request $request = null, ?string $keyword = null): bool
     {
         $normalizedNumber = $this->normalizePhoneNumber($phoneNumber);
         
@@ -120,11 +125,23 @@ class TwilioWebhookController
         $guests = MsgGuest::where('phone_hash', $hash)
             ->orWhere('phone', 'LIKE', "%$normalizedNumber")
             ->get();
+        $subscribedAny = false;
         foreach ($guests as $guest) {
+            // Enforce double opt-in window: must have opt_in_request within last 24 hours
+            $recentRequest = MsgConsentEvent::query()
+                ->where('msg_guest_id', $guest->id)
+                ->where('action', 'opt_in_request')
+                ->where('occurred_at', '>=', now()->subHours(24))
+                ->exists();
+            if (!$recentRequest) {
+                // Do not subscribe this guest; continue to next
+                continue;
+            }
             $guest->update([
                 'is_subscribed' => true,
                 'subscription_status_updated_at' => now(),
             ]);
+            $subscribedAny = true;
 
             MsgConsentEvent::create([
                 'team_id' => $guest->team_id,
@@ -135,11 +152,12 @@ class TwilioWebhookController
                 'ip' => $request?->ip(),
                 'user_agent' => $request?->userAgent(),
                 'occurred_at' => now(),
-                'meta' => ['keyword' => 'START'],
+                'meta' => ['keyword' => $keyword ?: 'START'],
             ]);
         }
             
-        Log::info("User opted in: $normalizedNumber");
+        Log::info("User opted in: $normalizedNumber", ['subscribed' => $subscribedAny]);
+        return $subscribedAny;
     }
     
     protected function normalizePhoneNumber($phoneNumber)
@@ -153,6 +171,18 @@ class TwilioWebhookController
         }
         
         return $number;
+    }
+
+    protected function resolveBusinessName(?int $teamId = null): string
+    {
+        $business = config('messaging.help.business_name', config('app.name', 'Our Service'));
+        if ($teamId) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $teamId)->first();
+            if ($teamCfg && !empty($teamCfg->help_business_name)) {
+                $business = $teamCfg->help_business_name;
+            }
+        }
+        return $business;
     }
 
     protected function buildHelpMessage(?int $teamId = null): string
@@ -202,7 +232,8 @@ class TwilioWebhookController
     protected function newTwiml()
     {
         if (class_exists('\\Twilio\\TwiML\\MessagingResponse')) {
-            return new \Twilio\TwiML\MessagingResponse();
+            $klass = '\\Twilio\\TwiML\\MessagingResponse';
+            return new $klass();
         }
         // Minimal stub with message() and __toString() to build TwiML
         return new class {

@@ -83,6 +83,7 @@ class WebOptInTest extends TestCase
         $res = $this->postJson('/api/consents/opt-in-web', [
             'phone' => '12345',
             'checkbox' => true,
+            'email' => 'p@example.com',
         ]);
 
         $res->assertStatus(422);
@@ -100,6 +101,7 @@ class WebOptInTest extends TestCase
         $res = $this->postJson('/api/consents/opt-in-web', [
             'phone' => '+1 555 123 4567',
             'consent_checkbox' => 'on',
+            'email' => 'legacy@example.com',
         ]);
 
         $res->assertStatus(202);
@@ -130,6 +132,7 @@ class WebOptInTest extends TestCase
             'team_id' => 42,
             'phone' => '5551234567',
             'checkbox' => true,
+            'email' => 'team@example.com',
         ])->assertStatus(202);
 
         $this->assertEquals(1, MsgGuest::where('team_id', 42)->count());
@@ -147,6 +150,7 @@ class WebOptInTest extends TestCase
         $res = $this->postJson('/api/consents/opt-in-web', [
             'phone' => '5551234567',
             'checkbox' => true,
+            'email' => 'fail@example.com',
         ]);
 
         $res->assertStatus(202);
@@ -193,6 +197,7 @@ class WebOptInTest extends TestCase
             ->postJson('/api/consents/opt-in-web', [
                 'phone' => '5551234567',
                 'checkbox' => true,
+                'email' => 'headers@example.com',
             ]);
 
         $res->assertStatus(202);
