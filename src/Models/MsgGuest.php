@@ -19,20 +19,23 @@ class MsgGuest extends Model
         'email_hash',
         'phone_hash',
         'is_subscribed',
+        'do_not_contact',
         'last_message_at',
-        'subscription_status_updated_at'
+        'subscription_status_updated_at',
+        'anonymized_at'
     ];
 
     protected $casts = [
-        'email' => 'encrypted',
-        'phone' => 'encrypted',
         'is_subscribed' => 'boolean',
+        'do_not_contact' => 'boolean',
         'last_message_at' => 'datetime',
-        'subscription_status_updated_at' => 'datetime'
+        'subscription_status_updated_at' => 'datetime',
+        'anonymized_at' => 'datetime'
     ];
 
     protected $attributes = [
-        'is_subscribed' => true // Default to opted-in
+        'is_subscribed' => false, // Default to pending (unsubscribed) until confirmed
+        'do_not_contact' => false
     ];
 
     public function messages()

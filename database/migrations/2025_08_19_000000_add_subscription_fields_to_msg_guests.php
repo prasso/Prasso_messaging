@@ -20,14 +20,23 @@ return new class extends Migration
 
     public function down()
     {
+        // Drop index before dropping columns and use explicit index name
         Schema::table('msg_guests', function (Blueprint $table) {
-            $table->dropColumn([
-                'is_subscribed',
-                'last_message_at',
-                'subscription_status_updated_at'
-            ]);
-            
-            $table->dropIndex(['phone', 'is_subscribed']);
+            if (Schema::hasColumn('msg_guests', 'is_subscribed')) {
+                // Laravel default index name for composite index: {table}_{columns}_index
+                $table->dropIndex('msg_guests_phone_is_subscribed_index');
+            }
+        });
+        Schema::table('msg_guests', function (Blueprint $table) {
+            if (Schema::hasColumn('msg_guests', 'subscription_status_updated_at')) {
+                $table->dropColumn('subscription_status_updated_at');
+            }
+            if (Schema::hasColumn('msg_guests', 'last_message_at')) {
+                $table->dropColumn('last_message_at');
+            }
+            if (Schema::hasColumn('msg_guests', 'is_subscribed')) {
+                $table->dropColumn('is_subscribed');
+            }
         });
     }
 };

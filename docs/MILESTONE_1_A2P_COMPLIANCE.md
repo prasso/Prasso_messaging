@@ -84,6 +84,8 @@ Consent event fields:
 - SMS to a guest with `is_subscribed=false` is skipped at controller and job levels.
 - Inbound START re-enables sending by flipping `is_subscribed=true`.
 
+Note: Outbound SMS sent via `ProcessMsgDelivery` auto-append a compliance footer (business ID, "Reply STOP to unsubscribe", disclaimer). To avoid duplication, message samples and templates may omit explicit STOP lines.
+
 ## Setup checklist
 - [ ] Configure env vars (Twilio + HELP fields if desired)
 - [ ] Run `php artisan migrate`
@@ -98,6 +100,29 @@ Consent event fields:
 - 403 from webhook: signature check failed. Ensure the exact URL matches Twilio’s configured webhook and `TWILIO_AUTH_TOKEN` is correct.
 - HELP response: adjust values in `config/messaging.php` or env variables.
 - No DLR updates: confirm the status callback URL and that `provider_message_id` is being saved (check `msg_deliveries`).
+
+## Team verification (sending restriction)
+
+- Fields on `msg_team_settings`:
+  - `verification_status` (verified | pending | rejected | suspended)
+  - `verified_at` (timestamp, nullable)
+  - `verification_notes` (text, nullable)
+
+- Enforcement in `src/Jobs/ProcessMsgDelivery.php`:
+  - If a delivery has `team_id` and the corresponding team is not `verified` (or no settings), SMS is skipped with `error="team not verified"`.
+
+- Audit trail: `msg_team_verification_audits`
+  - Columns: `team_id`, `status`, `notes`, `changed_by_user_id`, `created_at`
+  - Use admin API to change status; each change writes an audit row.
+
+- Admin endpoints (auth; see `routes/api.php` and `src/Http/Controllers/Api/TeamVerificationController.php`):
+  - `GET /api/teams/{teamId}/verification/status`
+  - `POST /api/teams/{teamId}/verification/status` (body: `status` one of verified|pending|rejected|suspended; optional `notes`)
+  - `GET /api/teams/{teamId}/verification/audits`
+
+- Migration references:
+  - `database/migrations/2025_08_27_224000_alter_msg_team_settings_add_verification_fields.php`
+  - `database/migrations/2025_08_28_153500_create_msg_team_verification_audits_table.php`
 
 ## Security notes
 - Webhooks are signed by Twilio. Keep `TWILIO_AUTH_TOKEN` secret.

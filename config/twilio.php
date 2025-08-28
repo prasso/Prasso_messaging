@@ -50,7 +50,7 @@ return [
     | Keywords that will trigger an opt-out when received from a user.
     |
     */
-    'opt_out_keywords' => ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'],
+    'opt_out_keywords' => ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'OPTOUT'],
 
     /*
     |--------------------------------------------------------------------------
@@ -60,5 +60,5 @@ return [
     | Keywords that will trigger an opt-in when received from a user.
     |
     */
-    'opt_in_keywords' => ['START', 'YES', 'UNSTOP', 'SUBSCRIBE', 'UNSTOP'],
+    'opt_in_keywords' => ['START', 'YES', 'UNSTOP', 'SUBSCRIBE', 'JOIN'],
 ];

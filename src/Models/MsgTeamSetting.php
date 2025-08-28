@@ -22,10 +22,14 @@ class MsgTeamSetting extends Model
         'help_disclaimer',
         'rate_batch_size',
         'rate_batch_interval_seconds',
+        'verification_status',
+        'verified_at',
+        'verification_notes',
         'meta',
     ];
 
     protected $casts = [
         'meta' => 'array',
+        'verified_at' => 'datetime',
     ];
 }

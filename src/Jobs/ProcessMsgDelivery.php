@@ -152,11 +152,29 @@ class ProcessMsgDelivery implements ShouldQueue
             }
         } elseif ($delivery->recipient_type === 'guest') {
             $guest = MsgGuest::query()->find($delivery->recipient_id);
-            $phone = $guest?->phone;
+            // Use raw original to avoid decrypting plaintext when custom mutator bypasses encrypted cast.
+            $phone = $guest?->getRawOriginal('phone') ?: ($guest?->phone);
             $recipientName = $guest?->name ?? null;
-            // Enforce consent for guests
-            if ($guest && property_exists($guest, 'is_subscribed') && $guest->is_subscribed === false) {
+            // Enforce consent for guests: pending/unsubscribed guests must be skipped
+            if ($guest && ($guest->is_subscribed ?? false) !== true) {
                 $isSubscribed = false;
+            }
+            // Respect privacy flags: do-not-contact and anonymized
+            if ($guest && (bool) ($guest->do_not_contact ?? false)) {
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'do-not-contact',
+                    'failed_at' => now(),
+                ]);
+                return;
+            }
+            if ($guest && !is_null($guest->anonymized_at ?? null)) {
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'anonymized recipient',
+                    'failed_at' => now(),
+                ]);
+                return;
             }
         }
 
@@ -172,10 +190,73 @@ class ProcessMsgDelivery implements ShouldQueue
         if (! $isSubscribed) {
             $delivery->update([
                 'status' => 'skipped',
-                'error' => 'unsubscribed recipient',
+                'error' => 'pending or unsubscribed recipient',
                 'failed_at' => now(),
             ]);
             return;
+        }
+
+        // Team verification enforcement: require verified status before sending for a team
+        if (!empty($delivery->team_id)) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $delivery->team_id)->first();
+            $status = $teamCfg?->verification_status;
+            if (!$teamCfg || strtolower((string)$status) !== 'verified') {
+                $ctx = $this->logCtx($delivery, 'sms');
+                Log::info('Team not verified; skipping SMS', $ctx + [
+                    'team_id' => $delivery->team_id,
+                    'verification_status' => $status,
+                ]);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'team not verified',
+                    'failed_at' => now(),
+                ]);
+                return;
+            }
+        }
+
+        // Per-guest frequency governance (cap messages in a rolling window)
+        $rateCfg = (array) config('messaging.rate_limit', []);
+        $cap = (int) ($rateCfg['per_guest_monthly_cap'] ?? 0);
+        $windowDays = (int) ($rateCfg['per_guest_window_days'] ?? 30);
+        $allowBypass = (bool) ($rateCfg['allow_transactional_bypass'] ?? true);
+        $isTransactional = strtolower((string) ($delivery->metadata['type'] ?? '')) === 'transactional';
+        $overrideAlways = (bool) ($delivery->metadata['override_frequency'] ?? false);
+        $overrideUntil = $delivery->metadata['override_until'] ?? null; // ISO string or timestamp
+        $overrideActive = false;
+        if (!empty($overrideUntil)) {
+            try {
+                $overrideActive = now()->lt(\Carbon\Carbon::parse($overrideUntil));
+            } catch (\Throwable $e) {
+                $overrideActive = false;
+            }
+        }
+        if ($cap > 0 && $windowDays > 0 && !($allowBypass && $isTransactional) && !($overrideAlways || $overrideActive)) {
+            $windowStart = now()->subDays($windowDays);
+            $priorCount = MsgDelivery::query()
+                ->where('channel', 'sms')
+                ->where('status', 'sent')
+                ->where('team_id', $delivery->team_id)
+                ->where('recipient_type', $delivery->recipient_type)
+                ->where('recipient_id', $delivery->recipient_id)
+                ->whereNot('id', $delivery->id)
+                ->where('sent_at', '>=', $windowStart)
+                ->count();
+
+            if ($priorCount >= $cap) {
+                $ctx = $this->logCtx($delivery, 'sms');
+                Log::info('Per-guest frequency cap reached; skipping SMS', $ctx + [
+                    'cap' => $cap,
+                    'window_days' => $windowDays,
+                    'prior_count' => $priorCount,
+                ]);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'per-guest frequency cap reached',
+                    'failed_at' => now(),
+                ]);
+                return;
+            }
         }
 
         // Determine from number with precedence: delivery metadata -> team settings -> app config
@@ -212,9 +293,23 @@ class ProcessMsgDelivery implements ShouldQueue
         }
 
         try {
-            $client = new Client($sid, $token);
-            $body = $this->replaceTokens($message->body ?? '', $recipientName);
-            $twilioMessage = $client->messages->create($to, [
+            $client = app()->bound(Client::class) ? app(Client::class) : new Client($sid, $token);
+            $baseBody = $this->replaceTokens($message->body ?? '', $recipientName);
+            $footer = $this->buildSmsFooter($delivery->team_id);
+            $body = $this->applySmsFooterAndLimit($baseBody, $footer, $this->logCtx($delivery, 'sms'));
+            $messagesApi = null;
+            if (is_object($client)) {
+                // Prefer callable accessor on mocks, then property as fallback
+                if (method_exists($client, 'messages')) {
+                    $messagesApi = $client->messages();
+                } elseif (isset($client->messages) && is_object($client->messages)) {
+                    $messagesApi = $client->messages;
+                }
+            }
+            if (!$messagesApi) {
+                throw new \RuntimeException('Twilio messages API unavailable');
+            }
+            $twilioMessage = $messagesApi->create($to, [
                 'from' => $from,
                 'body' => $body,
             ]);
@@ -324,6 +419,84 @@ class ProcessMsgDelivery implements ShouldQueue
         // attempts() starts at 1; map to index (attempt-1), clamp to last value
         $idx = min($attempt - 1, count($schedule) - 1);
         return (int) $schedule[$idx];
+    }
+
+    /**
+     * Build a short compliance footer for SMS messages including business identification,
+     * STOP instructions, and disclaimer. Pull values from per-team settings when present,
+     * otherwise fall back to messaging config.
+     */
+    protected function buildSmsFooter(?int $teamId): string
+    {
+        $business = config('messaging.help.business_name', config('app.name', 'Your Organization'));
+        $disclaimer = config('messaging.help.disclaimer', 'Msg & data rates may apply.');
+        $contact = '';
+
+        if (!empty($teamId)) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $teamId)->first();
+            if ($teamCfg) {
+                if (!empty($teamCfg->help_business_name)) {
+                    $business = $teamCfg->help_business_name;
+                }
+                if (!empty($teamCfg->help_disclaimer)) {
+                    $disclaimer = $teamCfg->help_disclaimer;
+                }
+                // Prefer phone, then website, then email for a compact contact reference
+                $contact = $teamCfg->help_contact_phone
+                    ?: ($teamCfg->help_contact_website ?: ($teamCfg->help_contact_email ?: ''));
+            }
+        }
+
+        $parts = [];
+        // Business identification
+        $parts[] = $business;
+        // Mandatory STOP instruction
+        $parts[] = 'Reply STOP to unsubscribe';
+        // Disclaimer
+        if (!empty($disclaimer)) {
+            $parts[] = $disclaimer;
+        }
+        // Optional concise contact
+        if (!empty($contact)) {
+            $parts[] = $contact;
+        }
+
+        // Join with separators to keep concise; single line footer
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * Append footer and ensure message stays within Twilio's 1600-char hard limit.
+     * Log estimated segments for observability.
+     */
+    protected function applySmsFooterAndLimit(string $base, string $footer, array $logCtx): string
+    {
+        $joined = trim($base) !== '' ? (rtrim($base) . "\n" . $footer) : $footer;
+
+        // Twilio hard limit is ~1600 chars; trim if necessary
+        $max = 1600;
+        $hasMb = function_exists('mb_strlen') && function_exists('mb_substr');
+        $length = $hasMb ? mb_strlen($joined, 'UTF-8') : strlen($joined);
+        if ($length > $max) {
+            if ($hasMb) {
+                $joined = mb_substr($joined, 0, $max - 1, 'UTF-8') . '…';
+            } else {
+                $joined = substr($joined, 0, $max - 3) . '...';
+            }
+            $length = $hasMb ? mb_strlen($joined, 'UTF-8') : strlen($joined);
+        }
+
+        // Rough segment estimation: GSM-7 uses 160 for 1 segment then 153, UCS-2 uses 70 then 67
+        $isUcs2 = (bool) preg_match('/[^\x00-\x7F]/u', $joined);
+        $len = $length;
+        if ($isUcs2) {
+            $segments = $len <= 70 ? 1 : (int) ceil($len / 67);
+        } else {
+            $segments = $len <= 160 ? 1 : (int) ceil($len / 153);
+        }
+        Log::info('SMS length/segments', $logCtx + ['chars' => $len, 'ucs2' => $isUcs2, 'segments' => $segments]);
+
+        return $joined;
     }
 
     /**

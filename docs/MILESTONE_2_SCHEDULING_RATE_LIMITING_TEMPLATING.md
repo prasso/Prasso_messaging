@@ -36,7 +36,8 @@ Environment variables (optional overrides):
 
 Existing compliance-related environment values (unchanged but relevant):
 
-- `TWILIO_NUMBER` (used for default `sms_from`) — note: see Twilio config below.
+- `TWILIO_PHONE_NUMBER` (preferred default for `sms_from`).
+- `TWILIO_NUMBER` (legacy) — still supported as a fallback via `config('messaging.sms_from')`.
 - `MESSAGING_HELP_BUSINESS`, `MESSAGING_HELP_PURPOSE`, `MESSAGING_HELP_PHONE`, `MESSAGING_HELP_EMAIL`, `MESSAGING_HELP_WEBSITE`, `MESSAGING_HELP_DISCLAIMER`
 
 Twilio config reminder:
@@ -45,8 +46,6 @@ Twilio config reminder:
   - `TWILIO_ACCOUNT_SID`
   - `TWILIO_AUTH_TOKEN`
   - `TWILIO_PHONE_NUMBER`
-
-Note: Messaging config currently references `TWILIO_NUMBER` for `sms_from`. Consider standardizing on `TWILIO_PHONE_NUMBER` in a future milestone.
 
 ---
 
@@ -154,10 +153,10 @@ Example:
 ## Operational Steps
 
 1. Ensure `.env` contains required Twilio credentials:
-   - `TWILIO_ACCOUNT_SID=...
-   - TWILIO_AUTH_TOKEN=...
-   - TWILIO_PHONE_NUMBER=+1...
-   - (Optional) `TWILIO_NUMBER` if you are relying on `config('messaging.sms_from')` currently.
+   - `TWILIO_ACCOUNT_SID=...`
+   - `TWILIO_AUTH_TOKEN=...`
+   - `TWILIO_PHONE_NUMBER=+1...`
+   - (Optional, legacy) `TWILIO_NUMBER` — used only as a fallback by `config('messaging.sms_from')`.
 2. (Optional) Set rate limit overrides:
    - `MESSAGING_BATCH_SIZE=50`
    - `MESSAGING_BATCH_INTERVAL=1`
