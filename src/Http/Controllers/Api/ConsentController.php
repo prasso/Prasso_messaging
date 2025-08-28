@@ -2,7 +2,7 @@
 
 namespace Prasso\Messaging\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
+use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -16,8 +16,8 @@ class ConsentController extends Controller
     /**
      * Accept web form opt-in submission and send double opt-in confirmation SMS.
      *
-     * Request fields: phone (required), name, email, consent_checkbox (required true),
-     * source_url, team_id
+     * Request fields: phone (required), name, email, checkbox (required true),
+     * source_url, ip, ua, team_id
      */
     public function optInWeb(Request $request)
     {
@@ -25,8 +25,12 @@ class ConsentController extends Controller
             'phone' => 'required|string',
             'name' => 'nullable|string|max:255',
             'email' => 'nullable|email|max:255',
-            'consent_checkbox' => 'required|accepted',
-            'source_url' => 'nullable|url|max:2000',
+            // accept either `checkbox` or legacy `consent_checkbox`
+            'checkbox' => 'nullable',
+            'consent_checkbox' => 'nullable',
+            'source_url' => 'nullable|string|max:2000',
+            'ip' => 'nullable|ip',
+            'ua' => 'nullable|string|max:1000',
             'team_id' => 'nullable|integer',
         ]);
 
@@ -42,11 +46,33 @@ class ConsentController extends Controller
         }
         $phoneHash = hash('sha256', $normalized);
 
-        // Find or create guest by phone hash (fallback to like on phone for legacy)
-        $guest = MsgGuest::query()
-            ->when($teamId, fn($q) => $q->where('team_id', $teamId))
-            ->where('phone_hash', $phoneHash)
-            ->orWhere('phone', 'like', "%$normalized")
+        // Determine checkbox acceptance from provided fields EARLY
+        $checkboxAccepted = filter_var($data['checkbox'] ?? $data['consent_checkbox'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            || ($data['checkbox'] ?? $data['consent_checkbox'] ?? null) === 'on'
+            || ($data['checkbox'] ?? $data['consent_checkbox'] ?? null) === 1
+            || ($data['checkbox'] ?? $data['consent_checkbox'] ?? null) === '1'
+            || ($data['checkbox'] ?? $data['consent_checkbox'] ?? null) === true;
+        if (!$checkboxAccepted) {
+            return response()->json(['message' => 'Consent checkbox must be accepted'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // Find or create guest by phone hash within team scope (fallback to like on phone for legacy)
+        $guestQuery = MsgGuest::query();
+        if ($teamId) {
+            $guestQuery->where('team_id', $teamId);
+        }
+        $emailHash = null;
+        if (!empty($data['email'])) {
+            $emailHash = hash('sha256', strtolower(trim((string) $data['email'])));
+        }
+        $guest = $guestQuery
+            ->where(function ($q) use ($phoneHash, $normalized, $emailHash) {
+                $q->where('phone_hash', $phoneHash)
+                  ->orWhere('phone', 'like', "%$normalized");
+                if ($emailHash) {
+                    $q->orWhere('email_hash', $emailHash);
+                }
+            })
             ->first();
 
         if (!$guest) {
@@ -54,34 +80,62 @@ class ConsentController extends Controller
             $guest->team_id = $teamId;
         }
 
-        if (!empty($data['name'])) {
-            $guest->name = $data['name'];
-        }
+        // Some older schemas require non-null user_id, name, and email.
+        // Provide reasonable fallbacks when absent from the form.
+        // Always set name/email explicitly to avoid decrypting legacy/plaintext values
+        $guest->name = !empty($data['name']) ? $data['name'] : 'SMS Guest';
         if (!empty($data['email'])) {
             $guest->email = $data['email'];
+        } else {
+            $hash = substr($phoneHash, 0, 12);
+            $guest->email = "guest+{$hash}@example.invalid";
+        }
+        if (!isset($guest->user_id)) {
+            // Default unattached user reference for legacy schema
+            $guest->user_id = 0;
         }
         // Store the phone; model mutator will maintain phone_hash
         $guest->phone = $data['phone'];
         // Do not subscribe until user confirms via YES/START reply
         $guest->is_subscribed = false;
         $guest->subscription_status_updated_at = now();
-        $guest->save();
+        try {
+            $guest->save();
+        } catch (\Throwable $e) {
+            Log::error('Failed to save guest on web opt-in', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'message' => 'Failed to record guest',
+                'error' => $e->getMessage(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         // Record consent event for web form submission (request stage)
-        MsgConsentEvent::create([
-            'team_id' => $teamId,
+        try {
+            MsgConsentEvent::create([
             'msg_guest_id' => $guest->id,
             'action' => 'opt_in_request',
             'method' => 'web',
             'source' => $data['source_url'] ?? $request->headers->get('referer'),
-            'ip' => $request->ip(),
-            'user_agent' => (string) $request->userAgent(),
+            'ip' => $data['ip'] ?? $request->ip(),
+            'user_agent' => (string) ($data['ua'] ?? $request->userAgent()),
             'occurred_at' => now(),
             'meta' => [
-                'consent_checkbox' => (bool) $data['consent_checkbox'],
+                'consent_checkbox' => (bool) $checkboxAccepted,
                 'consent_checked_at' => now()->toIso8601String(),
             ],
-        ]);
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to create consent event on web opt-in', [
+                'guest_id' => $guest->id,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'message' => 'Failed to record consent event',
+                'error' => $e->getMessage(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         // Send confirmation SMS
         $business = config('messaging.help.business_name', config('app.name', 'Our Service'));
@@ -91,7 +145,8 @@ class ConsentController extends Controller
                 $business = $teamCfg->help_business_name;
             }
         }
-        $confirmation = "Welcome to $business text notifications! Reply YES to confirm your subscription and start receiving updates. Reply STOP anytime to unsubscribe. Msg & data rates may apply. Reply HELP for help.";
+        // Confirmation SMS copy derived from consent form language
+        $confirmation = "You're almost done! Reply YES to confirm your $business text notifications. You'll receive appointment reminders, service updates, and occasional offers. Reply STOP to opt out, HELP for help. Msg & data rates may apply.";
 
         try {
             app(SmsService::class)->send($guest->phone, $confirmation, $teamId);

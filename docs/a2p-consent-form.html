@@ -1,0 +1,378 @@
+<div>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .logo {
+            margin-bottom: 30px;
+        }
+        
+        .logo h1 {
+            color: #667eea;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .tagline {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .checkbox-group {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+            margin: 20px 0;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        
+        .checkbox-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        input[type="checkbox"] {
+            margin-right: 12px;
+            margin-top: 4px;
+            transform: scale(1.2);
+        }
+        
+        .checkbox-text {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #555;
+        }
+        
+        .checkbox-text.required {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .legal-text {
+            font-size: 12px;
+            color: #666;
+            background: #f1f3f4;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            margin: 20px 0;
+            text-align: left;
+            line-height: 1.4;
+        }
+        
+        .submit-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .links {
+            margin-top: 25px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .links a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        .links a:hover {
+            text-decoration: underline;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
+            margin-top: 20px;
+            display: none;
+        }
+    </style>
+
+    <div class="container">
+        <div class="logo">
+            <h1>[Business Name]</h1>
+            <p class="tagline">Stay connected with SMS notifications</p>
+        </div>
+        
+        <form id="smsOptinForm">
+            <div class="form-group">
+                <label for="firstName">First Name *</label>
+                <input type="text" id="firstName" name="firstName" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="lastName">Last Name *</label>
+                <input type="text" id="lastName" name="lastName" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="phone">Phone Number *</label>
+                <input type="tel" id="phone" name="phone" placeholder="(555) 123-4567" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email Address *</label>
+                <input type="email" id="email" name="email" placeholder="your@email.com" required>
+            </div>
+            
+            <div class="legal-text">
+                <strong>SMS Terms & Conditions:</strong><br>
+                By providing your phone number, you consent to receive automated text messages from [Business Name]. These may include appointment reminders, service updates, account notifications, and occasional promotional offers. Message frequency varies but typically 1-4 messages per month. Message and data rates may apply. You can opt out at any time by replying STOP to any message.
+            </div>
+            
+            <div class="checkbox-group">
+                <div class="checkbox-item">
+                    <input type="checkbox" id="smsConsent" name="smsConsent" required>
+                    <label for="smsConsent" class="checkbox-text required">
+                        <strong>I agree to receive text messages from [Business Name]</strong> including appointment reminders, service updates, and occasional promotional offers. I understand that message and data rates may apply and I can unsubscribe at any time by replying STOP. *
+                    </label>
+                </div>
+                
+                <div class="checkbox-item">
+                    <input type="checkbox" id="privacyConsent" name="privacyConsent" required>
+                    <label for="privacyConsent" class="checkbox-text required">
+                        <strong>I have read and agree to the Privacy Policy</strong> and understand how my personal information will be collected, used, and protected. *
+                    </label>
+                </div>
+                
+                <div class="checkbox-item">
+                    <input type="checkbox" id="emailConsent" name="emailConsent">
+                    <label for="emailConsent" class="checkbox-text">
+                        I would also like to receive email updates and newsletters (optional)
+                    </label>
+                </div>
+            </div>
+            
+            <button type="submit" class="submit-btn" id="submitBtn">
+                Subscribe to SMS Notifications
+            </button>
+            
+            <div class="success-message" id="successMessage">
+                <strong>Thank you!</strong> You'll receive a confirmation text message shortly. Please reply "YES" to confirm your subscription.
+            </div>
+            
+            <div class="error-message" id="errorMessage">
+                Please correct the errors above and try again.
+            </div>
+        </form>
+        
+        <div class="links">
+            <a href="/privacy-policy" target="_blank">Privacy Policy</a> | 
+            <a href="/terms-of-service" target="_blank">Terms of Service</a> | 
+            <a href="/sms-terms" target="_blank">SMS Terms</a><br><br>
+            Questions? Contact us at <a href="mailto:support@[business-domain].com">support@[business-domain].com</a> or call (555) 123-4567
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('smsOptinForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const form = e.target;
+            const submitBtn = document.getElementById('submitBtn');
+            const successMsg = document.getElementById('successMessage');
+            const errorMsg = document.getElementById('errorMessage');
+            
+            // Hide previous messages
+            successMsg.style.display = 'none';
+            errorMsg.style.display = 'none';
+            
+            // Validate form
+            if (!form.checkValidity()) {
+                errorMsg.textContent = 'Please fill in all required fields and check the required boxes.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+            
+            // Validate phone number format
+            const phone = document.getElementById('phone').value;
+            const phoneRegex = /^\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$/;
+            if (!phoneRegex.test(phone)) {
+                errorMsg.textContent = 'Please enter a valid 10-digit phone number.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+            
+            // Check required checkboxes
+            if (!document.getElementById('smsConsent').checked || !document.getElementById('privacyConsent').checked) {
+                errorMsg.textContent = 'Please check all required consent boxes.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+            
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+            
+            // Collect form data
+            const formData = {
+                firstName: document.getElementById('firstName').value,
+                lastName: document.getElementById('lastName').value,
+                phone: phone,
+                email: document.getElementById('email').value,
+                smsConsent: document.getElementById('smsConsent').checked,
+                privacyConsent: document.getElementById('privacyConsent').checked,
+                emailConsent: document.getElementById('emailConsent').checked,
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                ipAddress: 'captured-server-side'
+            };
+            
+            // Simulate API call (replace with your actual endpoint)
+            setTimeout(() => {
+                console.log('Form data to submit:', formData);
+                
+                // Show success message
+                successMsg.style.display = 'block';
+                
+                // Reset form
+                form.reset();
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Subscribe to SMS Notifications';
+                
+                // Scroll to success message
+                successMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // In production, replace the setTimeout with actual API call:
+                /*
+                fetch('/api/sms-signup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        successMsg.style.display = 'block';
+                        form.reset();
+                    } else {
+                        errorMsg.textContent = data.message || 'An error occurred. Please try again.';
+                        errorMsg.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    errorMsg.textContent = 'Network error. Please check your connection and try again.';
+                    errorMsg.style.display = 'block';
+                })
+                .finally(() => {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Subscribe to SMS Notifications';
+                });
+                */
+            }, 1500);
+        });
+        
+        // Real-time phone number formatting
+        document.getElementById('phone').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            let formattedValue = '';
+            
+            if (value.length > 0) {
+                if (value.length <= 3) {
+                    formattedValue = `(${value}`;
+                } else if (value.length <= 6) {
+                    formattedValue = `(${value.substring(0, 3)}) ${value.substring(3)}`;
+                } else {
+                    formattedValue = `(${value.substring(0, 3)}) ${value.substring(3, 6)}-${value.substring(6, 10)}`;
+                }
+            }
+            
+            e.target.value = formattedValue;
+        });
+    </script>
+</div>

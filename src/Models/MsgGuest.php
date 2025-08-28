@@ -26,8 +26,6 @@ class MsgGuest extends Model
     ];
 
     protected $casts = [
-        'email' => 'encrypted',
-        'phone' => 'encrypted',
         'is_subscribed' => 'boolean',
         'do_not_contact' => 'boolean',
         'last_message_at' => 'datetime',

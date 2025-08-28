@@ -16,11 +16,16 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Drop indexes by name before dropping columns
         Schema::table('msg_guests', function (Blueprint $table) {
-            $table->dropIndex(['phone_hash']);
-            $table->dropColumn('phone_hash');
-            $table->dropIndex(['email_hash']);
-            $table->dropColumn('email_hash');
+            if (Schema::hasColumn('msg_guests', 'phone_hash')) {
+                $table->dropIndex('msg_guests_phone_hash_index');
+                $table->dropColumn('phone_hash');
+            }
+            if (Schema::hasColumn('msg_guests', 'email_hash')) {
+                $table->dropIndex('msg_guests_email_hash_index');
+                $table->dropColumn('email_hash');
+            }
         });
     }
 };

@@ -26,6 +26,9 @@ abstract class TestCase extends BaseTestCase
 
     protected function getEnvironmentSetUp($app)
     {
+        // Ensure app key for encrypted casts
+        $app['config']->set('app.key', 'base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=');
+
         // Use in-memory sqlite
         $app['config']->set('database.default', 'sqlite');
         $app['config']->set('database.connections.sqlite', [

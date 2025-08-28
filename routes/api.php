@@ -15,8 +15,8 @@ use Prasso\Messaging\Http\Controllers\Api\ConsentController;
 use Prasso\Messaging\Http\Controllers\Api\PrivacyController;
 use Prasso\Messaging\Http\Controllers\Api\TeamVerificationController;
 
-// Public endpoint for web form opt-in (no auth)
-Route::prefix('api')->group(function () {
+// Public endpoint for web form opt-in (no auth) but still use 'api' middleware stack
+Route::middleware(['api'])->prefix('api')->group(function () {
     Route::post('/consents/opt-in-web', [ConsentController::class, 'optInWeb']);
 });
 
