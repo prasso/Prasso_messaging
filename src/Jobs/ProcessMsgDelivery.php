@@ -152,7 +152,8 @@ class ProcessMsgDelivery implements ShouldQueue
             }
         } elseif ($delivery->recipient_type === 'guest') {
             $guest = MsgGuest::query()->find($delivery->recipient_id);
-            $phone = $guest?->phone;
+            // Use raw original to avoid decrypting plaintext when custom mutator bypasses encrypted cast.
+            $phone = $guest?->getRawOriginal('phone') ?: ($guest?->phone);
             $recipientName = $guest?->name ?? null;
             // Enforce consent for guests: pending/unsubscribed guests must be skipped
             if ($guest && ($guest->is_subscribed ?? false) !== true) {

@@ -24,7 +24,7 @@ class TwilioWebhookController
             'all' => $request->all()
         ]);
 
-        $response = new \Twilio\TwiML\MessagingResponse();
+        $response = $this->newTwiml();
         
         // Persist inbound message for inbox/history before keyword branching
         $guestId = null;
@@ -76,7 +76,7 @@ class TwilioWebhookController
             $response->message('Thank you for your message. Reply HELP for information or STOP to unsubscribe.');
         }
         
-        return response($response)->header('Content-Type', 'text/xml');
+        return response((string) $response)->header('Content-Type', 'text/xml; charset=UTF-8');
     }
     
     protected function handleOptOut($phoneNumber, Request $request = null)
@@ -194,5 +194,32 @@ class TwilioWebhookController
         ];
 
         return trim(strtr($template, $replacements));
+    }
+
+    /**
+     * Create a TwiML response object. Falls back to a lightweight stub when twilio/sdk isn't installed.
+     */
+    protected function newTwiml()
+    {
+        if (class_exists('\\Twilio\\TwiML\\MessagingResponse')) {
+            return new \Twilio\TwiML\MessagingResponse();
+        }
+        // Minimal stub with message() and __toString() to build TwiML
+        return new class {
+            private array $messages = [];
+            public function message(string $text): void
+            {
+                $this->messages[] = $text;
+            }
+            public function __toString(): string
+            {
+                $xml = '<?xml version="1.0" encoding="UTF-8"?>'.'<Response>';
+                foreach ($this->messages as $m) {
+                    $xml .= '<Message>' . htmlspecialchars($m, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '</Message>';
+                }
+                $xml .= '</Response>';
+                return $xml;
+            }
+        };
     }
 }

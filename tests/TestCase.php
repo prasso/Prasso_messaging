@@ -4,17 +4,21 @@ namespace Prasso\Messaging\Tests;
 
 use Orchestra\Testbench\TestCase as BaseTestCase;
 use Prasso\Messaging\MessagingServiceProvider;
+use Filament\FilamentServiceProvider;
+use Livewire\LivewireServiceProvider;
 
 abstract class TestCase extends BaseTestCase
 {
     protected function getPackageProviders($app)
     {
         return [
+            LivewireServiceProvider::class,
+            FilamentServiceProvider::class,
             MessagingServiceProvider::class,
         ];
     }
 
-    protected function defineDatabaseMigrations($app)
+    protected function defineDatabaseMigrations(): void
     {
         // Load this package's migrations
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');

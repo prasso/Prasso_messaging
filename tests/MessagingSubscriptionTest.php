@@ -18,7 +18,9 @@ class MessagingSubscriptionTest extends TestCase
     {
         // Arrange: create a pending (unsubscribed) guest
         $guest = MsgGuest::create([
+            'user_id' => 1,
             'name' => 'Pending Person',
+            'email' => 'pending1@example.test',
             'phone' => '+15555550123',
             'is_subscribed' => false,
         ]);
@@ -52,6 +54,9 @@ class MessagingSubscriptionTest extends TestCase
     {
         // Arrange: create guest pending
         $guest = MsgGuest::create([
+            'user_id' => 1,
+            'name' => 'Pending Person 2',
+            'email' => 'pending2@example.test',
             'phone' => '+15555550124',
             'is_subscribed' => false,
         ]);
