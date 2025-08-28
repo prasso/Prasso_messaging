@@ -81,7 +81,7 @@ End-users provide explicit consent through verified web forms hosted on client w
 **Example Privacy Policy URL**: https://[CLIENT-DOMAIN]/privacy-policy
 
 ### Opt-in Message
-"Welcome to [Business Name] text notifications! Reply YES to confirm your subscription and start receiving updates. Reply STOP anytime to unsubscribe. Msg&data rates apply. Help: HELP"
+"Welcome to [Business Name] text notifications! Reply YES to confirm your subscription and start receiving updates. Reply STOP anytime to unsubscribe. Msg & data rates may apply. Help: HELP"
 
 ### Opt-in Keywords
 - YES
@@ -103,7 +103,7 @@ End-users provide explicit consent through verified web forms hosted on client w
 - OPTOUT
 
 ### Help Message
-"You are subscribed to [Business Name] text alerts for appointment reminders and updates. Msg&data rates may apply. Reply STOP to unsubscribe anytime. Questions? Email support@[business-domain].com or call [business phone]. Privacy: [business-domain]/privacy"
+"You are subscribed to [Business Name] text alerts for appointment reminders and updates. Msg & data rates may apply. Reply STOP to unsubscribe anytime. Questions? Email support@[business-domain].com or call [business phone]. Privacy: [business-domain]/privacy"
 
 ### Help Keywords
 - HELP
