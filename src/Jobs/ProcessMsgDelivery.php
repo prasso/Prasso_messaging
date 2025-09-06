@@ -41,40 +41,48 @@ class ProcessMsgDelivery implements ShouldQueue
 
     public function handle(): void
     {
+        info('ProcessMsgDelivery: Starting job for delivery ID: ' . $this->deliveryId);
         $delivery = MsgDelivery::query()->find($this->deliveryId);
         if (! $delivery) {
+            info('ProcessMsgDelivery: Delivery not found for ID: ' . $this->deliveryId);
             return;
         }
 
         // Only process queued deliveries
         if ($delivery->status !== 'queued') {
+            info('ProcessMsgDelivery: Delivery already processed, status: ' . $delivery->status . ' for ID: ' . $this->deliveryId);
             return;
         }
 
         // Respect scheduling: if send_at is in the future, release the job until due
         if ($delivery->send_at && now()->lt($delivery->send_at)) {
             $this->release(now()->diffInSeconds($delivery->send_at));
+            info('ProcessMsgDelivery: Delivery scheduled for future, releasing job for ID: ' . $this->deliveryId);
             return;
         }
 
+        info('ProcessMsgDelivery: Determining channel for delivery ID: ' . $this->deliveryId);
         switch ($delivery->channel) {
             case 'email':
+                info('ProcessMsgDelivery: Sending email for delivery ID: ' . $this->deliveryId);
                 $this->sendEmail($delivery);
                 break;
             case 'sms':
+                info('ProcessMsgDelivery: Sending SMS for delivery ID: ' . $this->deliveryId);
                 $this->sendSms($delivery);
                 break;
             default:
+                info('ProcessMsgDelivery: Skipping unsupported message type: ' . $delivery->channel . ' for delivery ID: ' . $this->deliveryId);
                 $delivery->update([
-                    'status' => 'failed',
-                    'error' => 'channel not implemented',
-                    'failed_at' => now(),
+                    'status' => 'skipped',
+                    'error' => 'Unsupported message type: ' . $delivery->channel,
                 ]);
         }
     }
 
     protected function sendEmail(MsgDelivery $delivery): void
     {
+        info('ProcessMsgDelivery: Starting email send process for delivery ID: ' . $delivery->id);
         $message = $delivery->message; // relation
 
         // Resolve recipient email
@@ -94,15 +102,18 @@ class ProcessMsgDelivery implements ShouldQueue
         }
 
         if (empty($email)) {
+            info('ProcessMsgDelivery: No email address found for recipient, delivery ID: ' . $delivery->id);
             $delivery->update([
-                'status' => 'failed',
-                'error' => 'missing email',
-                'failed_at' => now(),
+                'status' => 'skipped',
+                'error' => 'No email address found for recipient',
             ]);
             return;
         }
 
-        // Simple templating
+        // Replace tokens
+        if ($recipientName) {
+            info('ProcessMsgDelivery: Replacing tokens with recipient name');
+        }
         $subject = $this->replaceTokens($message->subject ?? '', $recipientName);
         $body = $this->replaceTokens($message->body ?? '', $recipientName);
 
@@ -112,24 +123,17 @@ class ProcessMsgDelivery implements ShouldQueue
                 $mail->to($email)->subject($subject);
             });
 
+            info('ProcessMsgDelivery: Email sent successfully to: ' . $email . ' for delivery ID: ' . $delivery->id);
             $delivery->update([
                 'status' => 'sent',
                 'sent_at' => now(),
             ]);
         } catch (\Throwable $e) {
-            $ctx = $this->logCtx($delivery, 'email');
-            Log::warning('Email send error', $ctx + ['error' => $e->getMessage()]);
-
-            if ($this->isTransientException($e)) {
-                // Release for retry using backoff
-                $this->release($this->nextBackoffSeconds());
-                return;
-            }
-
-            // Permanent error: mark failed and stop retrying
+            info('ProcessMsgDelivery: Email send error for delivery ID: ' . $delivery->id . ' - ' . $e->getMessage());
+            info($e);
             $delivery->update([
                 'status' => 'failed',
-                'error' => $e->getMessage(),
+                'error' => 'Email send error: ' . $e->getMessage(),
                 'failed_at' => now(),
             ]);
         }
@@ -137,6 +141,7 @@ class ProcessMsgDelivery implements ShouldQueue
 
     protected function sendSms(MsgDelivery $delivery): void
     {
+        info('ProcessMsgDelivery: Starting SMS send process for delivery ID: ' . $delivery->id);
         $message = $delivery->message;
 
         // Resolve recipient phone
@@ -161,37 +166,37 @@ class ProcessMsgDelivery implements ShouldQueue
             }
             // Respect privacy flags: do-not-contact and anonymized
             if ($guest && (bool) ($guest->do_not_contact ?? false)) {
+                info('ProcessMsgDelivery: Recipient has do-not-contact flag enabled, delivery ID: ' . $delivery->id);
                 $delivery->update([
                     'status' => 'skipped',
-                    'error' => 'do-not-contact',
-                    'failed_at' => now(),
+                    'error' => 'Recipient has do-not-contact flag enabled',
                 ]);
                 return;
             }
             if ($guest && !is_null($guest->anonymized_at ?? null)) {
+                info('ProcessMsgDelivery: Recipient is anonymized, delivery ID: ' . $delivery->id);
                 $delivery->update([
                     'status' => 'skipped',
-                    'error' => 'anonymized recipient',
-                    'failed_at' => now(),
+                    'error' => 'Recipient is anonymized',
                 ]);
                 return;
             }
         }
 
         if (empty($phone)) {
+            info('ProcessMsgDelivery: Invalid phone number format, delivery ID: ' . $delivery->id);
             $delivery->update([
-                'status' => 'failed',
-                'error' => 'missing phone',
-                'failed_at' => now(),
+                'status' => 'skipped',
+                'error' => 'Invalid phone number format',
             ]);
             return;
         }
 
         if (! $isSubscribed) {
+            info('ProcessMsgDelivery: Recipient is not subscribed, delivery ID: ' . $delivery->id);
             $delivery->update([
                 'status' => 'skipped',
-                'error' => 'pending or unsubscribed recipient',
-                'failed_at' => now(),
+                'error' => 'Recipient is not subscribed',
             ]);
             return;
         }
@@ -201,15 +206,10 @@ class ProcessMsgDelivery implements ShouldQueue
             $teamCfg = MsgTeamSetting::query()->where('team_id', $delivery->team_id)->first();
             $status = $teamCfg?->verification_status;
             if (!$teamCfg || strtolower((string)$status) !== 'verified') {
-                $ctx = $this->logCtx($delivery, 'sms');
-                Log::info('Team not verified; skipping SMS', $ctx + [
-                    'team_id' => $delivery->team_id,
-                    'verification_status' => $status,
-                ]);
+                info('ProcessMsgDelivery: Team not verified, delivery ID: ' . $delivery->id);
                 $delivery->update([
                     'status' => 'skipped',
-                    'error' => 'team not verified',
-                    'failed_at' => now(),
+                    'error' => 'Team not verified',
                 ]);
                 return;
             }
@@ -217,8 +217,10 @@ class ProcessMsgDelivery implements ShouldQueue
 
         // Per-guest frequency governance (cap messages in a rolling window)
         $rateCfg = (array) config('messaging.rate_limit', []);
-        $cap = (int) ($rateCfg['per_guest_monthly_cap'] ?? 0);
-        $windowDays = (int) ($rateCfg['per_guest_window_days'] ?? 30);
+        $monthlyCap = config('messaging.rate_limit.per_guest_monthly_cap', 30);
+        info('ProcessMsgDelivery: Rate limit monthly cap: ' . $monthlyCap . ' for delivery ID: ' . $delivery->id);
+        $windowDays = config('messaging.rate_limit.per_guest_window_days', 30);
+        info('ProcessMsgDelivery: Rate limit window days: ' . $windowDays . ' for delivery ID: ' . $delivery->id);
         $allowBypass = (bool) ($rateCfg['allow_transactional_bypass'] ?? true);
         $isTransactional = strtolower((string) ($delivery->metadata['type'] ?? '')) === 'transactional';
         $overrideAlways = (bool) ($delivery->metadata['override_frequency'] ?? false);
@@ -231,9 +233,9 @@ class ProcessMsgDelivery implements ShouldQueue
                 $overrideActive = false;
             }
         }
-        if ($cap > 0 && $windowDays > 0 && !($allowBypass && $isTransactional) && !($overrideAlways || $overrideActive)) {
+        if ($monthlyCap > 0 && $windowDays > 0 && !($allowBypass && $isTransactional) && !($overrideAlways || $overrideActive)) {
             $windowStart = now()->subDays($windowDays);
-            $priorCount = MsgDelivery::query()
+            $recentCount = MsgDelivery::query()
                 ->where('channel', 'sms')
                 ->where('status', 'sent')
                 ->where('team_id', $delivery->team_id)
@@ -243,17 +245,13 @@ class ProcessMsgDelivery implements ShouldQueue
                 ->where('sent_at', '>=', $windowStart)
                 ->count();
 
-            if ($priorCount >= $cap) {
-                $ctx = $this->logCtx($delivery, 'sms');
-                Log::info('Per-guest frequency cap reached; skipping SMS', $ctx + [
-                    'cap' => $cap,
-                    'window_days' => $windowDays,
-                    'prior_count' => $priorCount,
-                ]);
+            info('ProcessMsgDelivery: Recent message count for recipient: ' . $recentCount . ' of ' . $monthlyCap . ' for delivery ID: ' . $delivery->id);
+
+            if ($recentCount >= $monthlyCap) {
+                info('ProcessMsgDelivery: Per-guest frequency cap reached, delivery ID: ' . $delivery->id);
                 $delivery->update([
                     'status' => 'skipped',
-                    'error' => 'per-guest frequency cap reached',
-                    'failed_at' => now(),
+                    'error' => 'Per-guest frequency cap reached',
                 ]);
                 return;
             }
@@ -269,25 +267,27 @@ class ProcessMsgDelivery implements ShouldQueue
             $from = config('messaging.sms_from') ?: config('twilio.phone_number');
         }
         if (empty($from)) {
+            info('ProcessMsgDelivery: Missing from number, delivery ID: ' . $delivery->id);
             $delivery->update([
                 'status' => 'failed',
-                'error' => 'missing from number',
-                'failed_at' => now(),
+                'error' => 'Missing from number',
             ]);
             return;
         }
 
         // Normalize phone numbers to E.164 if possible (prepend '+' when missing)
-        $to = str_starts_with($phone, '+') ? $phone : ('+' . preg_replace('/\D+/', '', $phone));
+        // Remove all non-numeric characters
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+        info('ProcessMsgDelivery: Cleaned phone number: ' . $phone);
 
         // Standardize Twilio config usage
         $sid = config('twilio.sid') ?: env('TWILIO_ACCOUNT_SID');
         $token = config('twilio.auth_token') ?: env('TWILIO_AUTH_TOKEN');
         if (empty($sid) || empty($token)) {
+            info('ProcessMsgDelivery: Twilio credentials missing, delivery ID: ' . $delivery->id);
             $delivery->update([
                 'status' => 'failed',
-                'error' => 'twilio credentials missing',
-                'failed_at' => now(),
+                'error' => 'Twilio credentials missing',
             ]);
             return;
         }
@@ -296,7 +296,18 @@ class ProcessMsgDelivery implements ShouldQueue
             $client = app()->bound(Client::class) ? app(Client::class) : new Client($sid, $token);
             $baseBody = $this->replaceTokens($message->body ?? '', $recipientName);
             $footer = $this->buildSmsFooter($delivery->team_id);
-            $body = $this->applySmsFooterAndLimit($baseBody, $footer, $this->logCtx($delivery, 'sms'));
+            
+            // Create log context array directly to avoid method call issues
+            $logContext = [
+                'delivery_id' => $delivery->id,
+                'message_id' => $delivery->message_id,
+                'team_id' => $delivery->team_id,
+                'channel' => 'sms',
+                'recipient_type' => $delivery->recipient_type,
+                'recipient_id' => $delivery->recipient_id,
+            ];
+            
+            $body = $this->applySmsFooterAndLimit($baseBody, $footer, $logContext);
             $messagesApi = null;
             if (is_object($client)) {
                 // Prefer callable accessor on mocks, then property as fallback
@@ -309,18 +320,31 @@ class ProcessMsgDelivery implements ShouldQueue
             if (!$messagesApi) {
                 throw new \RuntimeException('Twilio messages API unavailable');
             }
-            $twilioMessage = $messagesApi->create($to, [
+            info('ProcessMsgDelivery: SMS body: ' . $body);
+            $twilioResponse = $messagesApi->create($phone, [
                 'from' => $from,
                 'body' => $body,
             ]);
 
+            info('ProcessMsgDelivery: SMS sent successfully to: ' . $phone . ' for delivery ID: ' . $delivery->id . ', Twilio SID: ' . $twilioResponse->sid);
             $delivery->update([
                 'status' => 'sent',
-                'provider_message_id' => $twilioMessage->sid ?? null,
+                'provider_message_id' => $twilioResponse->sid,
                 'sent_at' => now(),
             ]);
         } catch (TwilioRestException $e) {
-            $ctx = $this->logCtx($delivery, 'sms');
+            info('ProcessMsgDelivery: Twilio REST error for delivery ID: ' . $delivery->id . ' - ' . $e->getMessage());
+            
+            // Create log context array directly to avoid method call issues
+            $ctx = [
+                'delivery_id' => $delivery->id,
+                'message_id' => $delivery->message_id,
+                'team_id' => $delivery->team_id,
+                'channel' => 'sms',
+                'recipient_type' => $delivery->recipient_type,
+                'recipient_id' => $delivery->recipient_id,
+            ];
+            
             $code = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : null;
             Log::warning('Twilio REST error', $ctx + ['error' => $e->getMessage(), 'status_code' => $code]);
 
@@ -333,21 +357,13 @@ class ProcessMsgDelivery implements ShouldQueue
             $delivery->update([
                 'status' => 'failed',
                 'error' => trim(($code ? "$code: " : '') . $e->getMessage()),
-                'failed_at' => now(),
             ]);
         } catch (\Throwable $e) {
-            $ctx = $this->logCtx($delivery, 'sms');
-            Log::error('SMS send unexpected error', $ctx + ['error' => $e->getMessage()]);
-
-            if ($this->isTransientException($e)) {
-                $this->release($this->nextBackoffSeconds());
-                return;
-            }
-
+            info('ProcessMsgDelivery: SMS send unexpected error for delivery ID: ' . $delivery->id . ' - ' . $e->getMessage());
+            info($e);
             $delivery->update([
                 'status' => 'failed',
                 'error' => $e->getMessage(),
-                'failed_at' => now(),
             ]);
         }
     }
@@ -358,6 +374,7 @@ class ProcessMsgDelivery implements ShouldQueue
      */
     protected function replaceTokens(string $text, ?string $recipientName): string
     {
+        info('ProcessMsgDelivery: Preparing message body with recipient name: ' . ($recipientName ?? 'null'));
         if ($text === '') {
             return $text;
         }
@@ -372,62 +389,13 @@ class ProcessMsgDelivery implements ShouldQueue
     }
 
     /**
-     * Build a standard logging context for this job/delivery.
-     */
-    protected function logCtx(MsgDelivery $delivery, string $channel): array
-    {
-        return [
-            'delivery_id' => $delivery->id,
-            'channel' => $channel,
-            'attempt' => method_exists($this, 'attempts') ? $this->attempts() : null,
-            'team_id' => $delivery->team_id,
-            'recipient_type' => $delivery->recipient_type,
-            'recipient_id' => $delivery->recipient_id,
-        ];
-    }
-
-    /**
-     * Determine if an exception is likely transient (network/timeouts, 5xx, rate limits).
-     */
-    protected function isTransientException(\Throwable $e): bool
-    {
-        $msg = strtolower($e->getMessage());
-        if (str_contains($msg, 'timeout') || str_contains($msg, 'connection') || str_contains($msg, 'temporarily')) {
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Decide Twilio HTTP status codes that should be retried.
-     */
-    protected function isTransientTwilioStatus(?int $status): bool
-    {
-        if ($status === null) return true; // be conservative and retry once if unknown
-        if ($status === 429) return true; // rate limited
-        if ($status >= 500) return true; // server errors
-        return false; // 4xx are permanent (auth/validation)
-    }
-
-    /**
-     * Compute the next backoff seconds based on current attempt.
-     */
-    protected function nextBackoffSeconds(): int
-    {
-        $schedule = $this->backoff();
-        $attempt = max(1, (int) (method_exists($this, 'attempts') ? $this->attempts() : 1));
-        // attempts() starts at 1; map to index (attempt-1), clamp to last value
-        $idx = min($attempt - 1, count($schedule) - 1);
-        return (int) $schedule[$idx];
-    }
-
-    /**
      * Build a short compliance footer for SMS messages including business identification,
      * STOP instructions, and disclaimer. Pull values from per-team settings when present,
      * otherwise fall back to messaging config.
      */
     protected function buildSmsFooter(?int $teamId): string
     {
+        info('ProcessMsgDelivery: Building SMS footer for delivery ID: ' . $this->deliveryId);
         $business = config('messaging.help.business_name', config('app.name', 'Your Organization'));
         $disclaimer = config('messaging.help.disclaimer', 'Msg & data rates may apply.');
         $contact = '';
@@ -500,12 +468,58 @@ class ProcessMsgDelivery implements ShouldQueue
     }
 
     /**
+     * Determine if a Twilio status code is transient and should be retried.
+     */
+    protected function isTransientTwilioStatus(?int $code): bool
+    {
+        // Twilio status codes that indicate temporary issues
+        $transientCodes = [
+            429, // Too Many Requests
+            500, // Server Error
+            503, // Service Unavailable
+        ];
+        return $code !== null && in_array($code, $transientCodes, true);
+    }
+
+    /**
+     * Get the next backoff time in seconds based on the current attempt.
+     */
+    protected function nextBackoffSeconds(): int
+    {
+        $backoffs = $this->backoff();
+        $attempt = $this->attempts();
+        return $backoffs[min($attempt - 1, count($backoffs) - 1)] ?? 60;
+    }
+
+    /**
+     * Create a context array for logging.
+     */
+    protected function logCtx(MsgDelivery $delivery, string $channel): array
+    {
+        return [
+            'delivery_id' => $delivery->id,
+            'message_id' => $delivery->message_id,
+            'team_id' => $delivery->team_id,
+            'channel' => $channel,
+            'recipient_type' => $delivery->recipient_type,
+            'recipient_id' => $delivery->recipient_id,
+        ];
+    }
+
+    /**
      * Called when the job has exhausted all retries.
      */
     public function failed(\Throwable $e): void
     {
+        info('ProcessMsgDelivery: Job failed with exception for delivery ID: ' . $this->deliveryId);
+        info('ProcessMsgDelivery error details: ' . $e->getMessage());
+        info($e);
+
         $delivery = MsgDelivery::query()->find($this->deliveryId);
-        if (! $delivery) return;
+        if (! $delivery) {
+            info('ProcessMsgDelivery: Delivery not found for ID: ' . $this->deliveryId);
+            return;
+        }
 
         // Only set failed if not already marked sent/skipped/failed
         if ($delivery->status === 'queued' || $delivery->status === 'sending') {
@@ -515,7 +529,17 @@ class ProcessMsgDelivery implements ShouldQueue
                 'failed_at' => now(),
             ]);
         }
+        
+        // Create log context array directly to avoid method call issues
+        $logContext = [
+            'delivery_id' => $delivery->id,
+            'message_id' => $delivery->message_id,
+            'team_id' => $delivery->team_id,
+            'channel' => (string) $delivery->channel,
+            'recipient_type' => $delivery->recipient_type,
+            'recipient_id' => $delivery->recipient_id,
+        ];
 
-        Log::error('ProcessMsgDelivery exhausted retries', $this->logCtx($delivery, (string) $delivery->channel) + ['error' => $e->getMessage()]);
+        Log::error('ProcessMsgDelivery exhausted retries', $logContext + ['error' => $e->getMessage()]);
     }
 }

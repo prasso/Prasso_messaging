@@ -105,22 +105,63 @@ For per‑team overrides (Milestone 4), configure rows in `msg_team_settings` fo
 
 ## Team Verification & Auditability
 
-- Fields on `msg_team_settings`:
+### Team Registration Process
+
+```mermaid
+flowchart TD
+    A[Team Registration Start] --> B[Create Team in Main Application]
+    B --> C[Create msg_team_settings Record]
+    C --> D{Admin Review}
+    D -->|Pending| E[Team Status: Pending]
+    D -->|Rejected| F[Team Status: Rejected]
+    D -->|Verified| G[Team Status: Verified]
+    G --> H[Set verified_at Timestamp]
+    E --> I[Cannot Send Messages]
+    F --> I
+    H --> J[Can Send Messages]
+    
+    K[Admin API] --> L[GET /teams/{teamId}/verification/status]
+    K --> M[POST /teams/{teamId}/verification/status]
+    K --> N[GET /teams/{teamId}/verification/audits]
+    
+    M --> O[Update Verification Status]
+    O --> P[Create Audit Record]
+    P --> Q{New Status?}
+    Q -->|verified| R[Set verified_at]
+    Q -->|pending/rejected/suspended| S[Clear verified_at]
+    
+    R --> T[Team Can Send Messages]
+    S --> U[Team Cannot Send Messages]
+```
+
+- **Registration Steps**:
+  1. Teams are initially created in the main application
+  2. A record must be created in `msg_team_settings` with the team's configuration
+  3. Admin must review and approve the team by setting verification status
+  4. Only teams with `verified` status can send messages
+
+- **Fields on `msg_team_settings`**:
   - `verification_status` (verified | pending | rejected | suspended)
   - `verified_at` (timestamp, nullable)
   - `verification_notes` (text, nullable)
 
-- Enforcement:
+- **Verification Statuses**:
+  - `pending`: Initial review state
+  - `rejected`: Team did not pass verification
+  - `suspended`: Team was verified but later suspended
+  - `verified`: Team is approved to send messages
+
+- **Enforcement**:
   - `src/Jobs/ProcessMsgDelivery.php` checks `team_id` on each delivery; if the team's `verification_status` is not `verified` (or settings missing), the send is skipped with `error='team not verified'`.
 
-- Audit table:
+- **Audit table**:
   - `msg_team_verification_audits` records status changes: `team_id`, `status`, `notes`, `changed_by_user_id`, `created_at`.
 
-- Admin endpoints (authenticated; see `routes/api.php` and `src/Http/Controllers/Api/TeamVerificationController.php`):
+- **Admin endpoints** (authenticated; see `routes/api.php` and `src/Http/Controllers/Api/TeamVerificationController.php`):
   - `GET /api/teams/{teamId}/verification/status` → current status/details
   - `POST /api/teams/{teamId}/verification/status` → set status (`verified|pending|rejected|suspended`), optional `notes`
   - `GET /api/teams/{teamId}/verification/audits` → list audit history
 
-- Workflow:
+- **Workflow**:
   1. Admin sets status to `verified` when the team passes checks; `verified_at` auto-populates.
   2. Any other status unsets `verified_at` and blocks outbound SMS from that team.
