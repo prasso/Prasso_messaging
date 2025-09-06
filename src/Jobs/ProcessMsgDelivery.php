@@ -404,7 +404,7 @@ class ProcessMsgDelivery implements ShouldQueue
     {
         info('ProcessMsgDelivery: Building SMS footer for delivery ID: ' . $this->deliveryId);
         $business = config('messaging.help.business_name', config('app.name', 'Your Organization'));
-        $disclaimer = config('messaging.help.disclaimer', 'Msg & data rates may apply.');
+        $disclaimer = config('messaging.help.disclaimer', 'Msg&Data rates may apply.');
         $contact = '';
 
         if (!empty($teamId)) {
@@ -437,7 +437,7 @@ class ProcessMsgDelivery implements ShouldQueue
         }
 
         // Join with separators to keep concise; single line footer
-        return implode(' · ', $parts);
+        return implode('· ', $parts);
     }
 
     /**
