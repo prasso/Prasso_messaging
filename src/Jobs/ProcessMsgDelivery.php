@@ -283,6 +283,15 @@ class ProcessMsgDelivery implements ShouldQueue
         // Standardize Twilio config usage
         $sid = config('twilio.sid') ?: env('TWILIO_ACCOUNT_SID');
         $token = config('twilio.auth_token') ?: env('TWILIO_AUTH_TOKEN');
+        
+        // Log Twilio configuration
+        info('ProcessMsgDelivery: Twilio config check', [
+            'sid_exists' => !empty($sid),
+            'token_exists' => !empty($token),
+            'config_sid' => config('twilio.sid'),
+            'env_sid' => env('TWILIO_ACCOUNT_SID') ? 'set' : 'not set'
+        ]);
+        
         if (empty($sid) || empty($token)) {
             info('ProcessMsgDelivery: Twilio credentials missing, delivery ID: ' . $delivery->id);
             $delivery->update([
@@ -293,7 +302,8 @@ class ProcessMsgDelivery implements ShouldQueue
         }
 
         try {
-            $client = app()->bound(Client::class) ? app(Client::class) : new Client($sid, $token);
+            // Create Twilio client directly with credentials
+            $client = new Client($sid, $token);
             $baseBody = $this->replaceTokens($message->body ?? '', $recipientName);
             $footer = $this->buildSmsFooter($delivery->team_id);
             
@@ -308,20 +318,17 @@ class ProcessMsgDelivery implements ShouldQueue
             ];
             
             $body = $this->applySmsFooterAndLimit($baseBody, $footer, $logContext);
-            $messagesApi = null;
-            if (is_object($client)) {
-                // Prefer callable accessor on mocks, then property as fallback
-                if (method_exists($client, 'messages')) {
-                    $messagesApi = $client->messages();
-                } elseif (isset($client->messages) && is_object($client->messages)) {
-                    $messagesApi = $client->messages;
-                }
-            }
-            if (!$messagesApi) {
-                throw new \RuntimeException('Twilio messages API unavailable');
-            }
-            info('ProcessMsgDelivery: SMS body: ' . $body);
-            $twilioResponse = $messagesApi->create($phone, [
+            
+            // Debug logging for Twilio client
+            info('ProcessMsgDelivery: Twilio client initialized', [
+                'client_type' => is_object($client) ? get_class($client) : gettype($client),
+                'sid_length' => $sid ? strlen($sid) : 0,
+                'token_length' => $token ? strlen($token) : 0
+            ]);
+            
+            // Direct access to messages API
+            info('ProcessMsgDelivery: Sending SMS to ' . $phone);
+            $twilioResponse = $client->messages->create($phone, [
                 'from' => $from,
                 'body' => $body,
             ]);
