@@ -18,7 +18,15 @@ class MsgEngagementResource extends Resource
 {
     protected static ?string $model = MsgEngagement::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-ellipsis';
+
+    protected static ?string $navigationGroup = 'Marketing';
+    
+    protected static ?string $navigationColor = 'info';
+    
+    protected static ?string $navigationLabel = 'Customer Interactions';
+    
+    protected static ?int $navigationSort = 20;
 
     public static function form(Form $form): Form
     {

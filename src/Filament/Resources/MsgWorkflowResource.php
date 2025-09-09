@@ -18,7 +18,13 @@ class MsgWorkflowResource extends Resource
 {
     protected static ?string $model = MsgWorkflow::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-cog';
+
+    protected static ?string $navigationGroup = 'Advanced Settings';
+    
+    protected static ?string $navigationLabel = 'Message Workflows';
+    
+    protected static ?int $navigationSort = 10;
 
     public static function form(Form $form): Form
     {

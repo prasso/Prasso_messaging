@@ -17,6 +17,14 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
    class MsgCampaignResource extends Resource
    {
        protected static ?string $model = MsgCampaign::class;
+
+   protected static ?string $navigationIcon = 'heroicon-o-megaphone';
+
+   protected static ?string $navigationGroup = 'Marketing';
+   
+   protected static ?string $navigationLabel = 'Marketing Campaigns';
+   
+   protected static ?int $navigationSort = 10;
    
        public static function form(Form $form): Form
        {

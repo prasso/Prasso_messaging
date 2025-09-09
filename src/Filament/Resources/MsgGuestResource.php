@@ -18,7 +18,13 @@ class MsgGuestResource extends Resource
 {
     protected static ?string $model = MsgGuest::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
+
+    protected static ?string $navigationGroup = 'Marketing';
+    
+    protected static ?string $navigationLabel = 'Visitor Messages';
+    
+    protected static ?int $navigationSort = 30;
    
     public static function form(Form $form): Form
     {
