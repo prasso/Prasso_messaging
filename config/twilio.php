@@ -60,5 +60,5 @@ return [
     | Keywords that will trigger an opt-in when received from a user.
     |
     */
-    'opt_in_keywords' => ['START', 'YES', 'UNSTOP', 'SUBSCRIBE', 'JOIN'],
+    'opt_in_keywords' => ['START', 'YES', 'UNSTOP', 'SUBSCRIBE', 'JOIN','HELLO'],
 ];
