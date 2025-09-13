@@ -125,6 +125,45 @@ class TwilioWebhookController
         $guests = MsgGuest::where('phone_hash', $hash)
             ->orWhere('phone', 'LIKE', "%$normalizedNumber")
             ->get();
+        
+        // If no guests found with this phone number, create a new one with default team
+        if ($guests->isEmpty()) {
+            // Get the default team ID (using the first team in the system as fallback)
+            $defaultTeam = MsgTeamSetting::first();
+            $defaultTeamId = $defaultTeam ? $defaultTeam->team_id : 1; // Fallback to ID 1 if no teams exist
+            
+            // Create new guest with minimal required fields
+            $guest = MsgGuest::create([
+                'team_id' => $defaultTeamId,
+                'user_id' => 0, // Required by DB schema but not logically connected to a user
+                'name' => 'SMS Subscriber', // Placeholder name
+                'email' => 'sms_' . substr(md5($phoneNumber), 0, 10) . '@placeholder.local', // Unique placeholder email
+                'phone' => $phoneNumber, // This will automatically set phone_hash via mutator
+                'is_subscribed' => true,
+                'subscription_status_updated_at' => now(),
+            ]);
+            
+            // Create opt-in consent record
+            MsgConsentEvent::create([
+                'team_id' => $defaultTeamId,
+                'msg_guest_id' => $guest->id,
+                'action' => 'opt_in',
+                'method' => 'keyword',
+                'source' => $phoneNumber,
+                'ip' => $request?->ip(),
+                'user_agent' => $request?->userAgent(),
+                'occurred_at' => now(),
+                'meta' => ['keyword' => $keyword ?: 'START'],
+            ]);
+            
+            Log::info("Created new guest and opted in: $normalizedNumber", [
+                'guest_id' => $guest->id,
+                'team_id' => $defaultTeamId
+            ]);
+            
+            return true;
+        }
+        
         $subscribedAny = false;
         foreach ($guests as $guest) {
             // Enforce double opt-in window: must have opt_in_request within last 24 hours
