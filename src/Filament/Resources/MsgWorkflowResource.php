@@ -25,6 +25,8 @@ class MsgWorkflowResource extends Resource
     protected static ?string $navigationLabel = 'Message Workflows';
     
     protected static ?int $navigationSort = 10;
+    
+    protected static ?string $pluralModelLabel = 'Message Workflows';
 
     public static function form(Form $form): Form
     {

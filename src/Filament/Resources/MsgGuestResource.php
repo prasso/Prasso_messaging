@@ -20,11 +20,13 @@ class MsgGuestResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-user-circle';
 
-    protected static ?string $navigationGroup = 'Marketing';
+    protected static ?string $navigationGroup = 'Messaging';
     
-    protected static ?string $navigationLabel = 'Visitor Messages';
+    protected static ?string $navigationLabel = 'Guest List';
     
     protected static ?int $navigationSort = 30;
+    
+    protected static ?string $pluralModelLabel = 'Guest List';
    
     public static function form(Form $form): Form
     {

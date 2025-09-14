@@ -20,11 +20,13 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
    protected static ?string $navigationIcon = 'heroicon-o-megaphone';
 
-   protected static ?string $navigationGroup = 'Marketing';
+   protected static ?string $navigationGroup = 'Messaging';
    
    protected static ?string $navigationLabel = 'Marketing Campaigns';
    
    protected static ?int $navigationSort = 10;
+   
+   protected static ?string $pluralModelLabel = 'Marketing Campaigns';
    
        public static function form(Form $form): Form
        {

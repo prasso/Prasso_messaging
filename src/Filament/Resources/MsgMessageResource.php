@@ -20,11 +20,15 @@ class MsgMessageResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-envelope';
 
-    protected static ?string $navigationGroup = 'Marketing';
+    protected static ?string $navigationGroup = 'Messaging';
     
     protected static ?string $navigationLabel = 'Messages';
     
     protected static ?int $navigationSort = 40;
+    
+    protected static ?string $pluralModelLabel = 'Messages';
+    
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function form(Form $form): Form
     {

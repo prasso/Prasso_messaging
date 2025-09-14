@@ -20,13 +20,15 @@ class MsgEngagementResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-ellipsis';
 
-    protected static ?string $navigationGroup = 'Marketing';
+    protected static ?string $navigationGroup = 'Messaging';
     
     protected static ?string $navigationColor = 'info';
     
     protected static ?string $navigationLabel = 'Customer Interactions';
     
     protected static ?int $navigationSort = 20;
+    
+    protected static ?string $pluralModelLabel = 'Customer Interactions';
 
     public static function form(Form $form): Form
     {
