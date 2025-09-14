@@ -27,6 +27,8 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
    protected static ?int $navigationSort = 10;
    
    protected static ?string $pluralModelLabel = 'Marketing Campaigns';
+
+   protected static bool $shouldRegisterNavigation = false;
    
        public static function form(Form $form): Form
        {

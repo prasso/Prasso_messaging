@@ -30,6 +30,8 @@ class MsgEngagementResource extends Resource
     
     protected static ?string $pluralModelLabel = 'Customer Interactions';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Form $form): Form
     {
         return $form
