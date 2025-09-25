@@ -6,6 +6,11 @@ return [
       
     ],
     'user_model' => App\Models\User::class,
+    // Optional: set to your domain Member model class to enable 'member' recipient_type
+    // e.g. Prasso\Church\Models\Member::class. The model is expected to implement
+    // Prasso\Messaging\Contracts\MemberContact for best compatibility; otherwise
+    // Messaging will fall back to common attributes (email, phone, name/full_name).
+    'member_model' => env('MESSAGING_MEMBER_MODEL'),
     'date_format' => env('MESSAGING_DATE_FORMAT', config('app.date_format', 'd/m/Y')),
     // Default SMS from number (E.164). Prefer TWILIO_PHONE_NUMBER; fallback to legacy TWILIO_NUMBER.
     'sms_from' => env('TWILIO_PHONE_NUMBER', env('TWILIO_NUMBER')),
