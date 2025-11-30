@@ -47,9 +47,22 @@ class TwilioWebhookController
             if (!empty($url)) $media[] = $url;
         }
 
+        // Find the most recent delivery to this guest to link as the reply target
+        $msgDeliveryId = null;
+        if ($guestId) {
+            $recentDelivery = \Prasso\Messaging\Models\MsgDelivery::query()
+                ->where('recipient_type', MsgGuest::class)
+                ->where('recipient_id', $guestId)
+                ->where('status', 'sent')
+                ->orderBy('sent_at', 'desc')
+                ->first();
+            $msgDeliveryId = $recentDelivery?->id;
+        }
+
         MsgInboundMessage::create([
             'team_id' => $teamId,
             'msg_guest_id' => $guestId,
+            'msg_delivery_id' => $msgDeliveryId,
             'from' => $from,
             'to' => $request->input('To'),
             'body' => $body,

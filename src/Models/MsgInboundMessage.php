@@ -14,6 +14,7 @@ class MsgInboundMessage extends Model
     protected $fillable = [
         'team_id',
         'msg_guest_id',
+        'msg_delivery_id',
         'from',
         'to',
         'body',
