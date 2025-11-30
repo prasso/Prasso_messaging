@@ -1,5 +1,23 @@
 * Prasso Messaging
 
+## Quick Start: Running the Queue Worker
+
+**Messages will not be sent until the queue worker is running.**
+
+```bash
+# Set queue connection to database (not sync)
+# In your .env file:
+QUEUE_CONNECTION=database
+
+# Run the queue worker
+php artisan queue:work
+
+# Or with custom settings
+php artisan queue:work --queue=default --tries=3 --timeout=90
+```
+
+The queue worker processes scheduled and queued messages. It must run continuously in production. See [Queue Processing](#queue-processing) below for details.
+
 ## A2P Compliance Docs
 
 See Milestone 1 (Consent, HELP, Webhook Verification, Delivery Receipts):
@@ -165,3 +183,93 @@ flowchart TD
 - **Workflow**:
   1. Admin sets status to `verified` when the team passes checks; `verified_at` auto-populates.
   2. Any other status unsets `verified_at` and blocks outbound SMS from that team.
+
+## Queue Processing
+
+### Overview
+
+The messaging system uses Laravel's queue system to process message deliveries asynchronously. When messages are created and sent, delivery jobs are queued and processed by the queue worker.
+
+### Running the Queue Worker
+
+**Critical:** The queue worker must be running continuously for messages to be delivered.
+
+```bash
+# Start the queue worker
+php artisan queue:work
+
+# Or with custom settings
+php artisan queue:work --queue=default --tries=3 --timeout=90
+
+# Process jobs once and exit (for testing)
+php artisan queue:work --stop-when-empty
+```
+
+### Configuration
+
+Queue connection is controlled by the `QUEUE_CONNECTION` environment variable in `.env`:
+
+```env
+# Development (processes jobs immediately)
+QUEUE_CONNECTION=sync
+
+# Production (requires running queue:work)
+QUEUE_CONNECTION=database
+```
+
+### Job Details
+
+- **Job class**: `Prasso\Messaging\Jobs\ProcessMsgDelivery`
+- **Location**: `packages/prasso/messaging/src/Jobs/ProcessMsgDelivery.php`
+- **Retries**: 5 attempts with exponential backoff (60s, 120s, 300s, 600s)
+- **Channels**: Processes email, SMS, and other configured channels
+- **Scheduling**: Respects `send_at` timestamps on deliveries; releases jobs back to queue if not yet due
+
+### Monitoring
+
+Check queue status:
+
+```bash
+# View queued jobs
+php artisan queue:status
+
+# Query database for pending deliveries
+SELECT COUNT(*) FROM msg_deliveries WHERE status = 'queued';
+
+# Check failed jobs
+SELECT * FROM failed_jobs;
+```
+
+### Production Setup
+
+For production, use a process manager to keep the queue worker running:
+
+- **Supervisor** (recommended): Configure to restart the worker if it crashes
+- **Docker**: Run `php artisan queue:work` as a service
+- **AWS/Cloud**: Use managed queue services or container orchestration
+
+Example Supervisor config:
+```ini
+[program:prasso-queue-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /path/to/artisan queue:work --queue=default --tries=3
+autostart=true
+autorestart=true
+numprocs=1
+redirect_stderr=true
+stdout_logfile=/var/log/prasso-queue-worker.log
+```
+
+### Troubleshooting
+
+**Messages stuck in "queued" status:**
+1. Verify queue worker is running: `php artisan queue:status`
+2. Check `QUEUE_CONNECTION` is set to `database` (not `sync`)
+3. Ensure migrations have been run: `php artisan migrate`
+4. Check logs for errors: `tail -f storage/logs/laravel.log`
+
+**Queue worker crashes:**
+1. Check error logs for exceptions
+2. Verify database connection is working
+3. Ensure Twilio credentials are set for SMS sending
+4. Check disk space and memory availability

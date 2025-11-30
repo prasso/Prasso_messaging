@@ -9,9 +9,11 @@ use Prasso\Messaging\Services\RecipientResolver;
 use Prasso\Messaging\Jobs\ProcessMsgDelivery;
 use Prasso\Messaging\Models\MsgGuest;
 use Prasso\Messaging\Models\MsgTeamSetting;
+use Prasso\Messaging\Models\MsgSuppression;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Carbon\Carbon;
+use Illuminate\Validation\Rule;
 
 class MessageController extends Controller
 {
@@ -255,7 +257,8 @@ class MessageController extends Controller
      *             required={"message_id"},
      *             @OA\Property(property="message_id", type="integer", example=1),
      *             @OA\Property(property="guest_ids", type="array", @OA\Items(type="integer"), example={1, 2, 3}),
-     *             @OA\Property(property="user_ids", type="array", @OA\Items(type="integer"), example={10, 11})
+     *             @OA\Property(property="user_ids", type="array", @OA\Items(type="integer"), example={10, 11}),
+     *             @OA\Property(property="member_ids", type="array", @OA\Items(type="integer"), example={100, 101})
      *         )
      *     ),
      *     @OA\Response(
@@ -275,6 +278,17 @@ class MessageController extends Controller
      */
     public function send(Request $request)
     {
+        // Build dynamic exists rule for members based on configured model
+        $memberExistsRule = 'integer';
+        $memberModel = config('messaging.member_model');
+        if (is_string($memberModel) && class_exists($memberModel)) {
+            $table = (new $memberModel)->getTable();
+            $memberExistsRule = [
+                'integer',
+                Rule::exists($table, 'id'),
+            ];
+        }
+
         // Validate the request data
         $validatedData = $request->validate([
             'message_id' => 'required|integer|exists:msg_messages,id',
@@ -282,13 +296,15 @@ class MessageController extends Controller
             'guest_ids.*' => 'integer|exists:msg_guests,id',
             'user_ids' => 'array',
             'user_ids.*' => 'integer|exists:users,id',
+            'member_ids' => 'array',
+            'member_ids.*' => $memberExistsRule,
             'send_at' => 'nullable|date',
             'team_id' => 'nullable|integer',
         ]);
 
-        if (empty($validatedData['guest_ids'] ?? []) && empty($validatedData['user_ids'] ?? [])) {
+        if (empty($validatedData['guest_ids'] ?? []) && empty($validatedData['user_ids'] ?? []) && empty($validatedData['member_ids'] ?? [])) {
             return response()->json([
-                'message' => 'At least one of guest_ids or user_ids must be provided.'
+                'message' => 'At least one of guest_ids, user_ids, or member_ids must be provided.'
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
@@ -301,7 +317,8 @@ class MessageController extends Controller
         $resolver = app(RecipientResolver::class);
         $recipients = $resolver->resolve(
             $validatedData['user_ids'] ?? [],
-            $validatedData['guest_ids'] ?? []
+            $validatedData['guest_ids'] ?? [],
+            $validatedData['member_ids'] ?? []
         );
 
         $queued = 0;
@@ -325,7 +342,19 @@ class MessageController extends Controller
 
         $i = 0;
         foreach ($recipients as $recipient) {
-            [$status, $error] = $this->determineStatusForChannel($message->type, $recipient);
+            // Suppression check per channel
+            $isSuppressed = MsgSuppression::query()
+                ->where('recipient_type', $recipient['recipient_type'])
+                ->where('recipient_id', $recipient['recipient_id'])
+                ->where('channel', $message->type)
+                ->exists();
+
+            if ($isSuppressed) {
+                $status = 'skipped';
+                $error = 'suppressed';
+            } else {
+                [$status, $error] = $this->determineStatusForChannel($message->type, $recipient);
+            }
 
             $delivery = MsgDelivery::create([
                 'team_id' => $teamId,

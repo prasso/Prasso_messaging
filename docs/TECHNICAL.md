@@ -54,7 +54,7 @@ Alter and logging tables:
 `msg_deliveries` columns and indexes:
 
 - `id`, `team_id`, `msg_message_id` FK -> `msg_messages`
-- `recipient_type` (`user|guest`)
+- `recipient_type` (`user|guest|member`)
 - `recipient_id` (FK to `users.id` or `msg_guests.id` depending on `recipient_type`)
 - `channel` (`email|sms|push|inapp`)
 - `status` (`queued|sent|delivered|failed|skipped`)
@@ -63,7 +63,14 @@ Alter and logging tables:
 - `metadata` JSON (nullable)
 - `sent_at`, `delivered_at`, `failed_at` (nullable)
 - timestamps
-- Indexes: (`recipient_type`, `recipient_id`), (`channel`, `status`)
+- Indexes: (`recipient_type`, `recipient_id`), (`channel`, `status`), unique (`msg_message_id`, `recipient_type`, `recipient_id`, `channel`)
+
+Suppressions table:
+
+- **`2025_09_25_150000_create_msg_suppressions_table.php`**
+  - Creates `msg_suppressions` to store per-recipient per-channel opt-outs and blocks.
+  - Columns: `id`, `recipient_type` (`user|guest|member`), `recipient_id`, `channel` (`email|sms`), `reason`, `source`, `metadata`, timestamps.
+  - Indexes: unique (`recipient_type`, `recipient_id`, `channel`) and standard lookups.
 
 ## Key Models and Relations
 
@@ -84,27 +91,52 @@ Alter and logging tables:
 ## Unified Recipient Abstraction
 
 - `RecipientResolver` (`src/Services/RecipientResolver.php`)
-  - Input: `user_ids[]` and/or `guest_ids[]`
-  - Output: normalized recipients: `{ recipient_type: 'user'|'guest', recipient_id, email?, phone? }`
-  - Sources: `App\Models\User` and `Prasso\Messaging\Models\MsgGuest`
+  - Input: `user_ids[]` and/or `guest_ids[]` and/or `member_ids[]`
+  - Output: normalized recipients: `{ recipient_type: 'user'|'guest'|'member', recipient_id, email?, phone? }`
+  - Sources: `App\Models\User`, `Prasso\Messaging\Models\MsgGuest`, `Prasso\Church\Models\Member`
 
 ## Send Flow and Delivery Logging
 
 - Endpoint: `POST /api/messages/send`
 - Controller: `MessageController@send()` (`src/Http/Controllers/Api/MessageController.php`)
 - Flow:
-  1. Validates `message_id`, `user_ids[]` (exists: `users`), `guest_ids[]` (exists: `msg_guests`);
-     requires at least one of `user_ids` or `guest_ids`.
+  1. Validates `message_id`, `user_ids[]` (exists: `users`), `guest_ids[]` (exists: `msg_guests`), `member_ids[]` (exists: `chm_members`);
+     requires at least one of `user_ids`, `guest_ids`, or `member_ids`.
   2. Resolves recipients via `RecipientResolver`.
-  3. For each recipient, determines channel availability:
+  3. Checks `msg_suppressions` per recipient/channel; suppressed recipients are marked `skipped` with `error = 'suppressed'`.
+  4. For each recipient, determines channel availability:
      - `email`: requires `email`
      - `sms`: requires `phone`
      - `push`: currently skipped (not configured)
      - `inapp`: only supported for `recipient_type = user`
-  4. Creates a `msg_deliveries` row (with `team_id` when known) with `status = queued` when viable, otherwise `skipped` with reason in `error`.
-  5. Returns counts of `queued` vs `skipped`.
+  5. Creates a `msg_deliveries` row (with `team_id` when known) with `status = queued` when viable, otherwise `skipped` with reason in `error`.
+  6. Dispatches `ProcessMsgDelivery` job for each queued delivery.
+  7. Returns counts of `queued` vs `skipped`.
 
-Note: Actual dispatch to providers (Mail/Twilio/Push) should be implemented by background jobs that process queued deliveries and update `status`, `provider_message_id`, and timestamps.
+### Queue Processing
+
+After deliveries are created, the `ProcessMsgDelivery` job processes them asynchronously:
+
+- **Job class**: `Prasso\Messaging\Jobs\ProcessMsgDelivery` (`src/Jobs/ProcessMsgDelivery.php`)
+- **Trigger**: Automatically dispatched when `msg_deliveries` are created with `status = queued`
+- **Processing**:
+  1. Checks if delivery is still in `queued` status (may have been processed already)
+  2. Respects `send_at` scheduling: if in future, releases job back to queue
+  3. Resolves recipient contact info (email/phone) based on `recipient_type`
+  4. Applies rate limiting and compliance checks
+  5. Sends via appropriate channel (email via Mail, SMS via Twilio)
+  6. Updates delivery status to `sent`, `failed`, or `skipped` with error details
+- **Retries**: 5 attempts with exponential backoff (60s, 120s, 300s, 600s)
+- **Failure handling**: After all retries exhausted, marks delivery as `failed` and logs error
+
+**Critical:** The queue worker must be running continuously for deliveries to be processed:
+
+```bash
+php artisan queue:work
+```
+
+Without a running queue worker, deliveries remain in `queued` status indefinitely.
+
 Rate limiting can be overridden by team via `MsgTeamSetting`.
 
 ## API Surface (Summary)

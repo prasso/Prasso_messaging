@@ -48,14 +48,7 @@ class MsgDelivery extends Model
 
     public function replies()
     {
-        // This assumes that the recipient is a MsgGuest and replies are from the same guest.
-        // This may need to be adjusted if users can also reply via the same channels.
-        if ($this->recipient_type === MsgGuest::class) {
-            return $this->hasMany(MsgInboundMessage::class, 'msg_guest_id', 'recipient_id');
-        }
-
-        // For other recipient types, return a relationship that will always be empty.
-        // This satisfies Eloquent's requirement for a relationship instance and prevents errors.
-        return $this->hasMany(MsgInboundMessage::class, 'msg_guest_id', 'recipient_id')->whereRaw('1 = 0');
+        // Link to inbound messages that are replies to this specific delivery
+        return $this->hasMany(MsgInboundMessage::class, 'msg_delivery_id', 'id');
     }
 }

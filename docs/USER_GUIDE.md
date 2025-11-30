@@ -1,6 +1,6 @@
 # Messaging Package – User Guide
 
-This guide shows how to use the Messaging APIs to manage recipients (guests), create messages, and send them to guests and/or registered users.
+This guide shows how to use the Messaging APIs to manage recipients (guests), create messages, and send them to guests, registered users, and CHM members.
 
 All examples assume your app has Sanctum configured and that you pass a Bearer token in `Authorization`.
 
@@ -66,7 +66,7 @@ Response includes the new message `id`.
 
 ## Send a message
 
-You can send to guests and/or registered users by providing arrays of IDs. At least one of `guest_ids` or `user_ids` must be present.
+You can send to guests, registered users, and CHM members by providing arrays of IDs. At least one of `guest_ids`, `user_ids`, or `member_ids` must be present.
 
 - Email requires recipients to have `email`.
 - SMS requires recipients to have `phone`.
@@ -80,7 +80,8 @@ curl -X POST \
   -d '{
     "message_id": 1,
     "guest_ids": [1,2],
-    "user_ids": [10,11]
+    "user_ids": [10,11],
+    "member_ids": [100,101]
   }' \
   http://localhost/api/messages/send
 ```
@@ -95,7 +96,38 @@ Example response:
 }
 ```
 
-Queued items will be written to `msg_deliveries` with status `queued`. Items may be skipped if the required contact info is missing or the channel is not available.
+Queued items will be written to `msg_deliveries` with status `queued`. Items may be skipped if the required contact info is missing, the channel is not available, or the recipient is suppressed for the channel.
+
+### Important: Queue Worker Required
+
+**Messages will not be sent until the queue worker is running.** After sending a message, you must start the queue worker to process deliveries:
+
+```bash
+# In a separate terminal, start the queue worker
+php artisan queue:work
+
+# Or with custom settings
+php artisan queue:work --queue=default --tries=3 --timeout=90
+```
+
+The queue worker:
+- Processes queued deliveries
+- Respects scheduled `send_at` times
+- Retries failed deliveries with exponential backoff
+- Updates delivery status in the database
+
+For scheduled messages, the queue worker will automatically pick them up when their scheduled time arrives.
+
+### Suppressions
+
+To prevent sending to a recipient on a channel, insert a record into `msg_suppressions`:
+
+```sql
+INSERT INTO msg_suppressions (recipient_type, recipient_id, channel, reason, source, metadata, created_at, updated_at)
+VALUES ('member', 100, 'sms', 'unsubscribed', 'admin', NULL, NOW(), NOW());
+```
+
+Suppressed recipients will be counted as `skipped` with `error = "suppressed"`.
 
 ## Inspect delivery logs
 

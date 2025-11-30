@@ -14,6 +14,7 @@ use Prasso\Messaging\Models\MsgGuest;
 use Prasso\Messaging\Models\MsgTeamSetting;
 use Twilio\Exceptions\RestException as TwilioRestException;
 use Twilio\Rest\Client;
+use Prasso\Messaging\Contracts\MemberContact;
 
 class ProcessMsgDelivery implements ShouldQueue
 {
@@ -99,6 +100,20 @@ class ProcessMsgDelivery implements ShouldQueue
             $guest = MsgGuest::query()->find($delivery->recipient_id);
             $email = $guest?->email;
             $recipientName = $guest?->name ?? null;
+        } elseif ($delivery->recipient_type === 'member') {
+            $memberModel = config('messaging.member_model');
+            if (is_string($memberModel) && class_exists($memberModel)) {
+                $member = $memberModel::query()->find($delivery->recipient_id);
+                if ($member instanceof MemberContact) {
+                    $email = $member->getMemberEmail();
+                    $recipientName = $member->getMemberDisplayName();
+                } else {
+                    // Best-effort fallback to common attributes
+                    $email = $member?->email ?? ($member?->getAttribute('email') ?? null);
+                    $recipientName = $member?->full_name
+                        ?? ($member?->name ?? (method_exists($member, 'getFullNameAttribute') ? ($member?->full_name ?? null) : null));
+                }
+            }
         }
 
         if (empty($email)) {
@@ -180,6 +195,20 @@ class ProcessMsgDelivery implements ShouldQueue
                     'error' => 'Recipient is anonymized',
                 ]);
                 return;
+            }
+        } elseif ($delivery->recipient_type === 'member') {
+            $memberModel = config('messaging.member_model');
+            if (is_string($memberModel) && class_exists($memberModel)) {
+                $member = $memberModel::query()->find($delivery->recipient_id);
+                if ($member instanceof MemberContact) {
+                    $phone = $member->getMemberPhone();
+                    $recipientName = $member->getMemberDisplayName();
+                } else {
+                    // Best-effort fallback to common attributes
+                    $phone = $member?->getAttribute('phone') ?? ($member?->phone ?? null);
+                    $recipientName = $member?->full_name
+                        ?? ($member?->name ?? (method_exists($member, 'getFullNameAttribute') ? ($member?->full_name ?? null) : null));
+                }
             }
         }
 
