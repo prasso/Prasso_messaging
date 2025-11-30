@@ -98,6 +98,26 @@ Example response:
 
 Queued items will be written to `msg_deliveries` with status `queued`. Items may be skipped if the required contact info is missing, the channel is not available, or the recipient is suppressed for the channel.
 
+### Important: Queue Worker Required
+
+**Messages will not be sent until the queue worker is running.** After sending a message, you must start the queue worker to process deliveries:
+
+```bash
+# In a separate terminal, start the queue worker
+php artisan queue:work
+
+# Or with custom settings
+php artisan queue:work --queue=default --tries=3 --timeout=90
+```
+
+The queue worker:
+- Processes queued deliveries
+- Respects scheduled `send_at` times
+- Retries failed deliveries with exponential backoff
+- Updates delivery status in the database
+
+For scheduled messages, the queue worker will automatically pick them up when their scheduled time arrives.
+
 ### Suppressions
 
 To prevent sending to a recipient on a channel, insert a record into `msg_suppressions`:

@@ -110,9 +110,33 @@ Suppressions table:
      - `push`: currently skipped (not configured)
      - `inapp`: only supported for `recipient_type = user`
   5. Creates a `msg_deliveries` row (with `team_id` when known) with `status = queued` when viable, otherwise `skipped` with reason in `error`.
-  6. Returns counts of `queued` vs `skipped`.
+  6. Dispatches `ProcessMsgDelivery` job for each queued delivery.
+  7. Returns counts of `queued` vs `skipped`.
 
-Note: Actual dispatch to providers (Mail/Twilio/Push) should be implemented by background jobs that process queued deliveries and update `status`, `provider_message_id`, and timestamps.
+### Queue Processing
+
+After deliveries are created, the `ProcessMsgDelivery` job processes them asynchronously:
+
+- **Job class**: `Prasso\Messaging\Jobs\ProcessMsgDelivery` (`src/Jobs/ProcessMsgDelivery.php`)
+- **Trigger**: Automatically dispatched when `msg_deliveries` are created with `status = queued`
+- **Processing**:
+  1. Checks if delivery is still in `queued` status (may have been processed already)
+  2. Respects `send_at` scheduling: if in future, releases job back to queue
+  3. Resolves recipient contact info (email/phone) based on `recipient_type`
+  4. Applies rate limiting and compliance checks
+  5. Sends via appropriate channel (email via Mail, SMS via Twilio)
+  6. Updates delivery status to `sent`, `failed`, or `skipped` with error details
+- **Retries**: 5 attempts with exponential backoff (60s, 120s, 300s, 600s)
+- **Failure handling**: After all retries exhausted, marks delivery as `failed` and logs error
+
+**Critical:** The queue worker must be running continuously for deliveries to be processed:
+
+```bash
+php artisan queue:work
+```
+
+Without a running queue worker, deliveries remain in `queued` status indefinitely.
+
 Rate limiting can be overridden by team via `MsgTeamSetting`.
 
 ## API Surface (Summary)
