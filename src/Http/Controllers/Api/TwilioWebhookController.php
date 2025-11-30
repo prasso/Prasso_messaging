@@ -64,7 +64,7 @@ class TwilioWebhookController
         if ($guestId) {
             // Log all deliveries for this guest to debug
             $allDeliveries = \Prasso\Messaging\Models\MsgDelivery::query()
-                ->where('recipient_type', MsgGuest::class)
+                ->where('recipient_type', 'guest')
                 ->where('recipient_id', $guestId)
                 ->orderBy('sent_at', 'desc')
                 ->get(['id', 'status', 'sent_at', 'recipient_type', 'recipient_id']);
