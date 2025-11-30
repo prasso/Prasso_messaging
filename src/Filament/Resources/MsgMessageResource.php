@@ -73,7 +73,7 @@ class MsgMessageResource extends Resource
                 Tables\Columns\TextColumn::make('id')
                     ->label('View Replies')
                     ->html()
-                    ->formatStateUsing(fn ($record) => '<a href="' . route('message-conversations.show', ['messageId' => $record->id]) . '" target="_blank" class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-100 text-green-800 hover:bg-green-200">View All</a>')
+                    ->formatStateUsing(fn ($record) => '<a href="' . route('message-conversations.show', ['messageId' => $record->id]) . '" class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-100 text-green-800 hover:bg-green-200">View All</a>')
                     ->sortable(false)
                     ->toggleable(isToggledHiddenByDefault: false),
             ])

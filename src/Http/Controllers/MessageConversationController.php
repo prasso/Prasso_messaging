@@ -7,6 +7,7 @@ use Prasso\Messaging\Models\MsgMessage;
 use Prasso\Messaging\Models\MsgInboundMessage;
 use Prasso\Messaging\Models\MsgGuest;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\Auth;
 
 class MessageConversationController extends Controller
 {
@@ -17,8 +18,13 @@ class MessageConversationController extends Controller
     {
         $message = MsgMessage::with('deliveries')->findOrFail($messageId);
         
-        // Authorization: only allow viewing if user owns the team
-        $this->authorize('viewMessage', $message);
+        // Authorization: only allow viewing if user is authenticated and owns the team
+        if (Auth::check()) {
+            $this->authorize('viewMessage', $message);
+        } else {
+            // If not authenticated, deny access
+            abort(403, 'Unauthorized');
+        }
         
         // Get all delivery IDs for this message
         $deliveryIds = $message->deliveries()->pluck('id')->toArray();
@@ -46,8 +52,13 @@ class MessageConversationController extends Controller
     {
         $message = MsgMessage::with('deliveries')->findOrFail($messageId);
         
-        // Authorization: only allow viewing if user owns the team
-        $this->authorize('viewMessage', $message);
+        // Authorization: only allow viewing if user is authenticated and owns the team
+        if (Auth::check()) {
+            $this->authorize('viewMessage', $message);
+        } else {
+            // If not authenticated, deny access
+            abort(403, 'Unauthorized');
+        }
         
         // Get all delivery IDs for this message
         $deliveryIds = $message->deliveries()->pluck('id')->toArray();
