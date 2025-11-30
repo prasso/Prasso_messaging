@@ -30,6 +30,11 @@ class TwilioWebhookController
         $guestId = null;
         $teamId = null;
         $normalized = $this->normalizePhoneNumber($from);
+        Log::info('Phone normalization', [
+            'from' => $from,
+            'normalized' => $normalized,
+        ]);
+        
         if ($normalized) {
             $hash = hash('sha256', $normalized);
             $guest = MsgGuest::where('phone_hash', $hash)
@@ -37,6 +42,13 @@ class TwilioWebhookController
                 ->first();
             $guestId = $guest?->id;
             $teamId = $guest?->team_id;
+            
+            Log::info('Guest lookup', [
+                'normalized' => $normalized,
+                'hash' => $hash,
+                'found_guest_id' => $guestId,
+                'team_id' => $teamId,
+            ]);
         }
 
         // Collect media URLs if present
@@ -50,13 +62,33 @@ class TwilioWebhookController
         // Find the most recent delivery to this guest to link as the reply target
         $msgDeliveryId = null;
         if ($guestId) {
-            $recentDelivery = \Prasso\Messaging\Models\MsgDelivery::query()
+            // Log all deliveries for this guest to debug
+            $allDeliveries = \Prasso\Messaging\Models\MsgDelivery::query()
                 ->where('recipient_type', MsgGuest::class)
                 ->where('recipient_id', $guestId)
-                ->where('status', 'sent')
                 ->orderBy('sent_at', 'desc')
+                ->get(['id', 'status', 'sent_at', 'recipient_type', 'recipient_id']);
+            
+            Log::info('All deliveries for guest', [
+                'guest_id' => $guestId,
+                'delivery_count' => $allDeliveries->count(),
+                'deliveries' => $allDeliveries->map(fn($d) => [
+                    'id' => $d->id,
+                    'status' => $d->status,
+                    'sent_at' => $d->sent_at,
+                ])->toArray(),
+            ]);
+            
+            $recentDelivery = $allDeliveries
+                ->where('status', 'sent')
                 ->first();
             $msgDeliveryId = $recentDelivery?->id;
+            
+            Log::info('Delivery lookup for reply', [
+                'guest_id' => $guestId,
+                'found_delivery_id' => $msgDeliveryId,
+                'delivery_status' => $recentDelivery?->status,
+            ]);
         }
 
         MsgInboundMessage::create([
