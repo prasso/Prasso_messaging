@@ -111,6 +111,40 @@ class MsgDeliveryResource extends Resource
             ->paginationPageOptions([25, 50, 100]);
     }
 
+<<<<<<< Updated upstream
+=======
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = auth()->user();
+
+        if (!$user) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        // Super admins can see all deliveries
+        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
+            return $query;
+        }
+
+        // Get the current site from the request host
+        $site = \App\Http\Controllers\Controller::getClientFromHost();
+        if (!$site) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        // Get teams associated with this site
+        $siteTeamIds = $site->teams()->pluck('teams.id')->toArray();
+        
+        if (empty($siteTeamIds)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        // Only show deliveries from teams in this site
+        return $query->whereIn('team_id', $siteTeamIds);
+    }
+
+>>>>>>> Stashed changes
     public static function getPages(): array
     {
         return [
