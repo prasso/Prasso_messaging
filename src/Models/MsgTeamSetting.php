@@ -4,6 +4,7 @@ namespace Prasso\Messaging\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class MsgTeamSetting extends Model
 {
@@ -14,6 +15,10 @@ class MsgTeamSetting extends Model
     protected $fillable = [
         'team_id',
         'sms_from',
+        'whatsapp_enabled',
+        'whatsapp_phone_number_id',
+        'whatsapp_business_account_id',
+        'whatsapp_access_token',
         'help_business_name',
         'help_purpose',
         'help_contact_phone',
@@ -32,4 +37,9 @@ class MsgTeamSetting extends Model
         'meta' => 'array',
         'verified_at' => 'datetime',
     ];
+
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Team::class, 'team_id');
+    }
 }

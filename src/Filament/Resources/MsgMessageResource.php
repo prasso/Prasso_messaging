@@ -96,6 +96,30 @@ class MsgMessageResource extends Resource
             ]);
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = auth()->user();
+
+        if (!$user) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        // Super admins can see all messages
+        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
+            return $query;
+        }
+
+        // Regular users can only see messages from their own teams
+        $teamIds = $user->teams()->pluck('teams.id')->toArray();
+        
+        if (empty($teamIds)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereIn('team_id', $teamIds);
+    }
+
     public static function getRelations(): array
     {
         return [

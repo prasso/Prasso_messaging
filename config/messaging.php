@@ -15,6 +15,18 @@ return [
     // Default SMS from number (E.164). Prefer TWILIO_PHONE_NUMBER; fallback to legacy TWILIO_NUMBER.
     'sms_from' => env('TWILIO_PHONE_NUMBER', env('TWILIO_NUMBER')),
 
+    'whatsapp' => [
+        'enabled' => (bool) env('WHATSAPP_ENABLED', false),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v18.0'),
+        'base_url' => env('WHATSAPP_BASE_URL', 'https://graph.facebook.com'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        // Webhook verification and optional signature verification
+        'webhook_verify_token' => env('WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
+        'app_secret' => env('WHATSAPP_APP_SECRET'),
+    ],
+
     // Rate limiting settings (basic caps; can be overridden per-tenant later)
     'rate_limit' => [
         // Max items per batch when dispatching queued deliveries

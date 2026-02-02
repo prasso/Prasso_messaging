@@ -6,9 +6,22 @@ use Orchestra\Testbench\TestCase as BaseTestCase;
 use Prasso\Messaging\MessagingServiceProvider;
 use Filament\FilamentServiceProvider;
 use Livewire\LivewireServiceProvider;
+use Illuminate\Support\Facades\DB;
 
 abstract class TestCase extends BaseTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $default = config('database.default');
+        $database = config("database.connections.$default.database");
+
+        if ($default !== 'sqlite' || $database !== ':memory:') {
+            throw new \RuntimeException('Refusing to run tests: database must be sqlite :memory:. Current=' . $default . ' database=' . (string) $database);
+        }
+    }
+
     protected function getPackageProviders($app)
     {
         return [

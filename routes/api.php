@@ -14,10 +14,15 @@ use Prasso\Messaging\Http\Controllers\Api\InboundMessageController;
 use Prasso\Messaging\Http\Controllers\Api\ConsentController;
 use Prasso\Messaging\Http\Controllers\Api\PrivacyController;
 use Prasso\Messaging\Http\Controllers\Api\TeamVerificationController;
+use Prasso\Messaging\Http\Controllers\Api\WhatsAppWebhookController;
 
 // Public endpoint for web form opt-in (no auth) but still use 'api' middleware stack
 Route::middleware(['api'])->prefix('api')->group(function () {
     Route::post('/consents/opt-in-web', [ConsentController::class, 'optInWeb']);
+
+    // Meta WhatsApp webhook (no auth)
+    Route::get('/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify']);
+    Route::post('/whatsapp/webhook', [WhatsAppWebhookController::class, 'handle']);
 });
 
 Route::middleware(['api','auth:sanctum'])->prefix('api')->group(function () {
