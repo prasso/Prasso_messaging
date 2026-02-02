@@ -96,8 +96,6 @@ class MsgMessageResource extends Resource
             ]);
     }
 
-<<<<<<< Updated upstream
-=======
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
@@ -129,7 +127,6 @@ class MsgMessageResource extends Resource
         return $query->whereIn('team_id', $siteTeamIds);
     }
 
->>>>>>> Stashed changes
     public static function getRelations(): array
     {
         return [

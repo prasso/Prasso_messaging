@@ -4,6 +4,7 @@ namespace Prasso\Messaging\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class MsgTeamSetting extends Model
 {
@@ -32,4 +33,9 @@ class MsgTeamSetting extends Model
         'meta' => 'array',
         'verified_at' => 'datetime',
     ];
+
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Team::class, 'team_id');
+    }
 }

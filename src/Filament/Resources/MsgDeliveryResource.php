@@ -111,8 +111,6 @@ class MsgDeliveryResource extends Resource
             ->paginationPageOptions([25, 50, 100]);
     }
 
-<<<<<<< Updated upstream
-=======
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
@@ -144,7 +142,6 @@ class MsgDeliveryResource extends Resource
         return $query->whereIn('team_id', $siteTeamIds);
     }
 
->>>>>>> Stashed changes
     public static function getPages(): array
     {
         return [
