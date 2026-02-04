@@ -15,6 +15,10 @@ class MsgTeamSetting extends Model
     protected $fillable = [
         'team_id',
         'sms_from',
+        'whatsapp_enabled',
+        'whatsapp_phone_number_id',
+        'whatsapp_business_account_id',
+        'whatsapp_access_token',
         'help_business_name',
         'help_purpose',
         'help_contact_phone',

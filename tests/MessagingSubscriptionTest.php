@@ -2,7 +2,6 @@
 
 namespace Prasso\Messaging\Tests;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Prasso\Messaging\Http\Controllers\Api\TwilioWebhookController;
 use Prasso\Messaging\Jobs\ProcessMsgDelivery;
@@ -13,8 +12,7 @@ use Prasso\Messaging\Models\MsgConsentEvent;
 
 class MessagingSubscriptionTest extends TestCase
 {
-    use RefreshDatabase;
-
+   
     public function test_sms_delivery_skipped_when_guest_pending_confirmation()
     {
         // Arrange: create a pending (unsubscribed) guest

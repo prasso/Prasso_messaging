@@ -75,21 +75,14 @@ class MsgGuestResource extends Resource
             return $query;
         }
 
-        // Get the current site from the request host
-        $site = \App\Http\Controllers\Controller::getClientFromHost();
-        if (!$site) {
-            return $query->whereRaw('1 = 0');
-        }
-
-        // Get teams associated with this site
-        $siteTeamIds = $site->teams()->pluck('teams.id')->toArray();
+        // Regular users can only see guests from their own teams
+        $teamIds = $user->teams()->pluck('teams.id')->toArray();
         
-        if (empty($siteTeamIds)) {
+        if (empty($teamIds)) {
             return $query->whereRaw('1 = 0');
         }
 
-        // Only show guests from teams in this site
-        return $query->whereIn('team_id', $siteTeamIds);
+        return $query->whereIn('team_id', $teamIds);
     }
 
     public static function getRelations(): array

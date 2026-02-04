@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Mail;
 use Prasso\Messaging\Models\MsgDelivery;
 use Prasso\Messaging\Models\MsgGuest;
 use Prasso\Messaging\Models\MsgTeamSetting;
+use Prasso\Messaging\Services\WhatsAppService;
 use Twilio\Exceptions\RestException as TwilioRestException;
 use Twilio\Rest\Client;
 use Prasso\Messaging\Contracts\MemberContact;
@@ -72,6 +73,10 @@ class ProcessMsgDelivery implements ShouldQueue
                 info('ProcessMsgDelivery: Sending SMS for delivery ID: ' . $this->deliveryId);
                 $this->sendSms($delivery);
                 break;
+            case 'whatsapp':
+                info('ProcessMsgDelivery: Sending WhatsApp for delivery ID: ' . $this->deliveryId);
+                $this->sendWhatsApp($delivery);
+                break;
             default:
                 info('ProcessMsgDelivery: Skipping unsupported message type: ' . $delivery->channel . ' for delivery ID: ' . $this->deliveryId);
                 $delivery->update([
@@ -119,8 +124,9 @@ class ProcessMsgDelivery implements ShouldQueue
         if (empty($email)) {
             info('ProcessMsgDelivery: No email address found for recipient, delivery ID: ' . $delivery->id);
             $delivery->update([
-                'status' => 'skipped',
-                'error' => 'No email address found for recipient',
+                'status' => 'failed',
+                'error' => 'missing email',
+                'failed_at' => now(),
             ]);
             return;
         }
@@ -146,9 +152,15 @@ class ProcessMsgDelivery implements ShouldQueue
         } catch (\Throwable $e) {
             info('ProcessMsgDelivery: Email send error for delivery ID: ' . $delivery->id . ' - ' . $e->getMessage());
             info($e);
+            $msg = (string) $e->getMessage();
+            $isTransient = (bool) preg_match('/timeout|timed\s*out|temporary|try\s+again|connection\s+reset|rate\s+limit/i', $msg);
+            if ($isTransient) {
+                $this->release($this->nextBackoffSeconds());
+                return;
+            }
             $delivery->update([
                 'status' => 'failed',
-                'error' => 'Email send error: ' . $e->getMessage(),
+                'error' => $msg,
                 'failed_at' => now(),
             ]);
         }
@@ -215,8 +227,9 @@ class ProcessMsgDelivery implements ShouldQueue
         if (empty($phone)) {
             info('ProcessMsgDelivery: Invalid phone number format, delivery ID: ' . $delivery->id);
             $delivery->update([
-                'status' => 'skipped',
-                'error' => 'Invalid phone number format',
+                'status' => 'failed',
+                'error' => 'missing phone',
+                'failed_at' => now(),
             ]);
             return;
         }
@@ -225,7 +238,8 @@ class ProcessMsgDelivery implements ShouldQueue
             info('ProcessMsgDelivery: Recipient is not subscribed, delivery ID: ' . $delivery->id);
             $delivery->update([
                 'status' => 'skipped',
-                'error' => 'Recipient is not subscribed',
+                'error' => 'pending or unsubscribed recipient',
+                'failed_at' => now(),
             ]);
             return;
         }
@@ -238,7 +252,7 @@ class ProcessMsgDelivery implements ShouldQueue
                 info('ProcessMsgDelivery: Team not verified, delivery ID: ' . $delivery->id);
                 $delivery->update([
                     'status' => 'skipped',
-                    'error' => 'Team not verified',
+                    'error' => 'team not verified',
                 ]);
                 return;
             }
@@ -300,6 +314,7 @@ class ProcessMsgDelivery implements ShouldQueue
             $delivery->update([
                 'status' => 'failed',
                 'error' => 'Missing from number',
+                'failed_at' => now(),
             ]);
             return;
         }
@@ -325,14 +340,15 @@ class ProcessMsgDelivery implements ShouldQueue
             info('ProcessMsgDelivery: Twilio credentials missing, delivery ID: ' . $delivery->id);
             $delivery->update([
                 'status' => 'failed',
-                'error' => 'Twilio credentials missing',
+                'error' => 'twilio credentials missing',
+                'failed_at' => now(),
             ]);
             return;
         }
 
         try {
-            // Create Twilio client directly with credentials
-            $client = new Client($sid, $token);
+            // Allow container-bound client for testing; otherwise create directly
+            $client = app()->bound(Client::class) ? app(Client::class) : new Client($sid, $token);
             $baseBody = $this->replaceTokens($message->body ?? '', $recipientName);
             $footer = $this->buildSmsFooter($delivery->team_id);
             
@@ -393,13 +409,202 @@ class ProcessMsgDelivery implements ShouldQueue
             $delivery->update([
                 'status' => 'failed',
                 'error' => trim(($code ? "$code: " : '') . $e->getMessage()),
+                'failed_at' => now(),
             ]);
         } catch (\Throwable $e) {
             info('ProcessMsgDelivery: SMS send unexpected error for delivery ID: ' . $delivery->id . ' - ' . $e->getMessage());
             info($e);
+            $msg = (string) $e->getMessage();
+            $isTransient = (bool) preg_match('/timeout|timed\s*out|temporary|try\s+again|connection\s+reset|rate\s+limit/i', $msg);
+            if ($isTransient) {
+                $this->release($this->nextBackoffSeconds());
+                return;
+            }
+            $delivery->update([
+                'status' => 'failed',
+                'error' => $msg,
+                'failed_at' => now(),
+            ]);
+        }
+    }
+
+    protected function sendWhatsApp(MsgDelivery $delivery): void
+    {
+        info('ProcessMsgDelivery: Starting WhatsApp send process for delivery ID: ' . $delivery->id);
+        $message = $delivery->message;
+
+        // Resolve recipient phone (align with SMS resolution rules)
+        $phone = null;
+        $isSubscribed = true;
+        $recipientName = null;
+        if ($delivery->recipient_type === 'user') {
+            $userModel = config('messaging.user_model');
+            if (class_exists($userModel)) {
+                $user = $userModel::query()->find($delivery->recipient_id);
+                $phone = $user?->getAttribute('phone');
+                $recipientName = $user?->name ?? null;
+            }
+        } elseif ($delivery->recipient_type === 'guest') {
+            $guest = MsgGuest::query()->find($delivery->recipient_id);
+            $phone = $guest?->getRawOriginal('phone') ?: ($guest?->phone);
+            $recipientName = $guest?->name ?? null;
+
+            if ($guest && ($guest->is_subscribed ?? false) !== true) {
+                $isSubscribed = false;
+            }
+            if ($guest && (bool) ($guest->do_not_contact ?? false)) {
+                info('ProcessMsgDelivery: Recipient has do-not-contact flag enabled, delivery ID: ' . $delivery->id);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'Recipient has do-not-contact flag enabled',
+                ]);
+                return;
+            }
+            if ($guest && !is_null($guest->anonymized_at ?? null)) {
+                info('ProcessMsgDelivery: Recipient is anonymized, delivery ID: ' . $delivery->id);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'Recipient is anonymized',
+                ]);
+                return;
+            }
+        } elseif ($delivery->recipient_type === 'member') {
+            $memberModel = config('messaging.member_model');
+            if (is_string($memberModel) && class_exists($memberModel)) {
+                $member = $memberModel::query()->find($delivery->recipient_id);
+                if ($member instanceof MemberContact) {
+                    $phone = $member->getMemberPhone();
+                    $recipientName = $member->getMemberDisplayName();
+                } else {
+                    $phone = $member?->getAttribute('phone') ?? ($member?->phone ?? null);
+                    $recipientName = $member?->full_name
+                        ?? ($member?->name ?? (method_exists($member, 'getFullNameAttribute') ? ($member?->full_name ?? null) : null));
+                }
+            }
+        }
+
+        if (empty($phone)) {
+            info('ProcessMsgDelivery: Invalid phone number format, delivery ID: ' . $delivery->id);
+            $delivery->update([
+                'status' => 'skipped',
+                'error' => 'Invalid phone number format',
+            ]);
+            return;
+        }
+
+        if (! $isSubscribed) {
+            info('ProcessMsgDelivery: Recipient is not subscribed, delivery ID: ' . $delivery->id);
+            $delivery->update([
+                'status' => 'skipped',
+                'error' => 'Recipient is not subscribed',
+            ]);
+            return;
+        }
+
+        // Team verification + WhatsApp enablement enforcement
+        $teamCfg = null;
+        if (!empty($delivery->team_id)) {
+            $teamCfg = MsgTeamSetting::query()->where('team_id', $delivery->team_id)->first();
+            $status = $teamCfg?->verification_status;
+            if (!$teamCfg || strtolower((string) $status) !== 'verified') {
+                info('ProcessMsgDelivery: Team not verified, delivery ID: ' . $delivery->id);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'Team not verified',
+                ]);
+                return;
+            }
+
+            if (($teamCfg->whatsapp_enabled ?? false) !== true) {
+                info('ProcessMsgDelivery: WhatsApp not enabled for team, delivery ID: ' . $delivery->id);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'WhatsApp not enabled for team',
+                ]);
+                return;
+            }
+        }
+
+        // Per-guest frequency governance (cap messages in a rolling window) — align with SMS
+        $rateCfg = (array) config('messaging.rate_limit', []);
+        $monthlyCap = config('messaging.rate_limit.per_guest_monthly_cap', 30);
+        $windowDays = config('messaging.rate_limit.per_guest_window_days', 30);
+        $allowBypass = (bool) ($rateCfg['allow_transactional_bypass'] ?? true);
+        $isTransactional = strtolower((string) ($delivery->metadata['type'] ?? '')) === 'transactional';
+        $overrideAlways = (bool) ($delivery->metadata['override_frequency'] ?? false);
+        $overrideUntil = $delivery->metadata['override_until'] ?? null;
+        $overrideActive = false;
+        if (!empty($overrideUntil)) {
+            try {
+                $overrideActive = now()->lt(\Carbon\Carbon::parse($overrideUntil));
+            } catch (\Throwable $e) {
+                $overrideActive = false;
+            }
+        }
+
+        if ($monthlyCap > 0 && $windowDays > 0 && !($allowBypass && $isTransactional) && !($overrideAlways || $overrideActive)) {
+            $windowStart = now()->subDays($windowDays);
+            $recentCount = MsgDelivery::query()
+                ->where('channel', 'whatsapp')
+                ->where('status', 'sent')
+                ->where('team_id', $delivery->team_id)
+                ->where('recipient_type', $delivery->recipient_type)
+                ->where('recipient_id', $delivery->recipient_id)
+                ->whereNot('id', $delivery->id)
+                ->where('sent_at', '>=', $windowStart)
+                ->count();
+
+            if ($recentCount >= $monthlyCap) {
+                info('ProcessMsgDelivery: Per-guest frequency cap reached, delivery ID: ' . $delivery->id);
+                $delivery->update([
+                    'status' => 'skipped',
+                    'error' => 'Per-guest frequency cap reached',
+                ]);
+                return;
+            }
+        }
+
+        $body = $this->replaceTokens($message->body ?? '', $recipientName);
+
+        try {
+            $resp = app(WhatsAppService::class)->send($phone, $body, $delivery->team_id);
+
+            if ($resp->successful()) {
+                $providerId = $resp->json('messages.0.id');
+                $delivery->update([
+                    'status' => 'sent',
+                    'provider_message_id' => $providerId,
+                    'sent_at' => now(),
+                ]);
+                return;
+            }
+
+            $statusCode = $resp->status();
+            $error = $resp->json('error.message')
+                ?? $resp->json('error.error_user_msg')
+                ?? $resp->body();
+
+            Log::warning('WhatsApp send error', $this->logCtx($delivery, 'whatsapp') + [
+                'status_code' => $statusCode,
+                'error' => $error,
+            ]);
+
+            if (in_array($statusCode, [429, 500, 503], true)) {
+                $this->release($this->nextBackoffSeconds());
+                return;
+            }
+
+            $delivery->update([
+                'status' => 'failed',
+                'error' => trim(($statusCode ? "$statusCode: " : '') . (string) $error),
+                'failed_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('WhatsApp send unexpected error', $this->logCtx($delivery, 'whatsapp') + ['error' => $e->getMessage()]);
             $delivery->update([
                 'status' => 'failed',
                 'error' => $e->getMessage(),
+                'failed_at' => now(),
             ]);
         }
     }

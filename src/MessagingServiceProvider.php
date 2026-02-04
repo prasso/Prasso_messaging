@@ -36,6 +36,7 @@ class MessagingServiceProvider extends ServiceProvider
         if (!app()->runningUnitTests()) {
             Filament::registerResources(MessagingPanel::getMessagingResources());
 
+            Livewire::component('prasso.messaging.filament.resources.msg-team-setting-resource.pages.edit-msg-team-setting', \Prasso\Messaging\Filament\Resources\MsgTeamSettingResource\Pages\EditMsgTeamSetting::class);
             Livewire::component('prasso.messaging.filament.resources.msg-campaign-resource.pages.edit-msg-campaign', \Prasso\Messaging\Filament\Resources\MsgCampaignResource\Pages\EditMsgCampaign::class);
             Livewire::component('prasso.messaging.filament.resources.msg-engagement-resource.pages.edit-msg-engagement', \Prasso\Messaging\Filament\Resources\MsgEngagementResource\Pages\EditMsgEngagement::class);
             Livewire::component('prasso.messaging.filament.resources.msg-guest-resource.pages.edit-msg-guest', \Prasso\Messaging\Filament\Resources\MsgGuestResource\Pages\EditMsgGuest::class);
