@@ -30,12 +30,14 @@ class MsgTeamSetting extends Model
         'verification_status',
         'verified_at',
         'verification_notes',
+        'recipient_sources',
         'meta',
     ];
 
     protected $casts = [
         'meta' => 'array',
         'verified_at' => 'datetime',
+        'recipient_sources' => 'array',
     ];
 
     public function team(): BelongsTo
