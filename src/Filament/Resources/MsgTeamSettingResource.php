@@ -72,6 +72,19 @@ class MsgTeamSettingResource extends Resource
                             ->rows(3),
                     ])
                     ->columns(1),
+
+                Components\Section::make('Message Recipients')
+                    ->schema([
+                        Components\CheckboxList::make('recipient_sources')
+                            ->label('Allowed Recipient Sources')
+                            ->options([
+                                'users' => 'Registered Users',
+                                'guests' => 'Guests',
+                                'members' => 'Members',
+                            ])
+                            ->default(['users', 'guests', 'members']),
+                    ])
+                    ->columns(1),
             ]);
     }
 
