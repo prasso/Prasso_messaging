@@ -27,11 +27,13 @@ class RepliesReceivedResource extends Resource
         return $table
             ->query(static::getEloquentQuery())
             ->columns([
-                Tables\Columns\TextColumn::make('subject')
-                    ->label('Message Subject')
+                Tables\Columns\TextColumn::make('body')
+                    ->label('Message')
                     ->searchable()
                     ->sortable()
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->limit(200)
+                    ->wrap(),
 
                 Tables\Columns\TextColumn::make('type')
                     ->label('Type')
