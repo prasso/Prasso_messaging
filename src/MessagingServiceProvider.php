@@ -17,6 +17,9 @@ class MessagingServiceProvider extends ServiceProvider
         $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
         $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
 
+        // Load views
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'prasso-messaging');
+
         // Load migrations
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 

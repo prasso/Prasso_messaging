@@ -59,35 +59,52 @@ class TwilioWebhookController
             if (!empty($url)) $media[] = $url;
         }
 
-        // Find the most recent delivery to this guest to link as the reply target
+        // Find the most recent delivery to this phone number to link as the reply target
+        // This could be a user, guest, or member delivery - we need to check all types
         $msgDeliveryId = null;
-        if ($guestId) {
-            // Log all deliveries for this guest to debug
+        if ($normalized) {
+            // Look for any delivery where the recipient's phone matches this incoming number
+            // We'll check users, guests, and members
             $allDeliveries = \Prasso\Messaging\Models\MsgDelivery::query()
-                ->where('recipient_type', 'guest')
-                ->where('recipient_id', $guestId)
+                ->where('status', 'sent')
                 ->orderBy('sent_at', 'desc')
                 ->get(['id', 'status', 'sent_at', 'recipient_type', 'recipient_id']);
             
-            Log::info('All deliveries for guest', [
-                'guest_id' => $guestId,
-                'delivery_count' => $allDeliveries->count(),
-                'deliveries' => $allDeliveries->map(fn($d) => [
+            // Filter deliveries by checking if the recipient's phone matches
+            $matchingDeliveries = $allDeliveries->filter(function ($delivery) use ($normalized) {
+                $recipient = $this->getRecipient($delivery->recipient_type, $delivery->recipient_id);
+                if (!$recipient) return false;
+                
+                $recipientPhone = $recipient->phone ?? null;
+                if (!$recipientPhone) return false;
+                
+                $recipientNormalized = preg_replace('/[^0-9]/', '', $recipientPhone);
+                if (strlen($recipientNormalized) === 11 && str_starts_with($recipientNormalized, '1')) {
+                    $recipientNormalized = substr($recipientNormalized, 1);
+                }
+                
+                return $recipientNormalized === $normalized;
+            });
+            
+            Log::info('All deliveries matching phone', [
+                'normalized_phone' => $normalized,
+                'delivery_count' => $matchingDeliveries->count(),
+                'deliveries' => $matchingDeliveries->map(fn($d) => [
                     'id' => $d->id,
                     'status' => $d->status,
                     'sent_at' => $d->sent_at,
+                    'recipient_type' => $d->recipient_type,
                 ])->toArray(),
             ]);
             
-            $recentDelivery = $allDeliveries
-                ->where('status', 'sent')
-                ->first();
+            $recentDelivery = $matchingDeliveries->first();
             $msgDeliveryId = $recentDelivery?->id;
             
             Log::info('Delivery lookup for reply', [
-                'guest_id' => $guestId,
+                'normalized_phone' => $normalized,
                 'found_delivery_id' => $msgDeliveryId,
                 'delivery_status' => $recentDelivery?->status,
+                'recipient_type' => $recentDelivery?->recipient_type,
             ]);
         }
 
@@ -308,6 +325,31 @@ class TwilioWebhookController
         ];
 
         return trim(strtr($template, $replacements));
+    }
+
+    /**
+     * Get a recipient object by type and ID (user, guest, or member)
+     */
+    protected function getRecipient(string $recipientType, int $recipientId)
+    {
+        return match($recipientType) {
+            'user' => \App\Models\User::find($recipientId),
+            'guest' => MsgGuest::find($recipientId),
+            'member' => $this->getMemberModel()::find($recipientId),
+            default => null,
+        };
+    }
+
+    /**
+     * Get the configured Member model class
+     */
+    protected function getMemberModel()
+    {
+        $memberModel = config('messaging.member_model');
+        if (!$memberModel || !class_exists($memberModel)) {
+            return null;
+        }
+        return $memberModel;
     }
 
     /**

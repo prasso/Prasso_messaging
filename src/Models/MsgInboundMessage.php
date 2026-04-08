@@ -34,4 +34,9 @@ class MsgInboundMessage extends Model
     {
         return $this->belongsTo(MsgGuest::class, 'msg_guest_id');
     }
+
+    public function delivery()
+    {
+        return $this->belongsTo(MsgDelivery::class, 'msg_delivery_id');
+    }
 }

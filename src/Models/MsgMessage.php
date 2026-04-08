@@ -26,4 +26,14 @@ class MsgMessage extends Model
     {
         return $this->hasMany(MsgDelivery::class, 'msg_message_id');
     }
+
+    public function inboundMessages()
+    {
+        return $this->hasManyThrough(
+            MsgInboundMessage::class,
+            MsgDelivery::class,
+            'msg_message_id',
+            'msg_delivery_id'
+        );
+    }
 }
