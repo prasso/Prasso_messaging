@@ -21,6 +21,7 @@ class MsgTeamSetting extends Model
         'whatsapp_access_token',
         'help_business_name',
         'help_purpose',
+        'opt_in_confirmation_message',
         'help_contact_phone',
         'help_contact_email',
         'help_contact_website',

@@ -2,7 +2,6 @@
 
 namespace Prasso\Messaging\Http\Controllers\Api;
 
-use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -10,8 +9,9 @@ use Prasso\Messaging\Models\MsgConsentEvent;
 use Prasso\Messaging\Models\MsgGuest;
 use Prasso\Messaging\Models\MsgTeamSetting;
 use Prasso\Messaging\Services\SmsService;
+use App\Http\Controllers\Controller as BaseController;
 
-class ConsentController extends Controller
+class ConsentController extends BaseController
 {
     /**
      * Accept web form opt-in submission and send double opt-in confirmation SMS.
@@ -133,16 +133,61 @@ class ConsentController extends Controller
         }
 
         // Send confirmation SMS
-        $business = config('messaging.help.business_name', config('app.name', 'Our Service'));
-        if ($teamId) {
-            $teamCfg = MsgTeamSetting::query()->where('team_id', $teamId)->first();
-            if ($teamCfg && !empty($teamCfg->help_business_name)) {
-                $business = $teamCfg->help_business_name;
-            }
+        $site = BaseController::getClientFromHost();
+        
+        // Check if site is registered for SMS messaging
+        if (!$site) {
+            return response()->json([
+                'message' => 'Site not found. SMS messaging is not available.',
+            ], Response::HTTP_SERVICE_UNAVAILABLE);
         }
-        // Confirmation SMS copy derived from consent form language with monthly frequency disclosure
-        $cap = (int) config('messaging.rate_limit.per_guest_monthly_cap', 4);
-        $confirmation = "You're almost done! Reply YES to confirm your $business text notifications (up to {$cap} messages/month). You'll receive appointment reminders, service updates, and occasional offers. Reply STOP to opt out, HELP for help. Msg & data rates may apply.";
+        
+        // Get the site's first team to check registration
+        $siteTeam = $site->teams()->first();
+        if (!$siteTeam) {
+            return response()->json([
+                'message' => 'Site is not registered for SMS messaging. No team found.',
+            ], Response::HTTP_SERVICE_UNAVAILABLE);
+        }
+        
+        // Check if team has SMS settings (registration)
+        $teamCfg = MsgTeamSetting::query()->where('team_id', $siteTeam->id)->first();
+        if (!$teamCfg) {
+            return response()->json([
+                'message' => 'Site is not registered for SMS messaging. Please contact administrator.',
+            ], Response::HTTP_SERVICE_UNAVAILABLE);
+        }
+        
+        // Use the provided team_id or fall back to site's team
+        $effectiveTeamId = $teamId ?: $siteTeam->id;
+        $effectiveTeamCfg = $teamId ? 
+            MsgTeamSetting::query()->where('team_id', $teamId)->first() : 
+            $teamCfg;
+        
+        $business = $site->site_name;
+        if ($effectiveTeamCfg && !empty($effectiveTeamCfg->help_business_name)) {
+            $business = $effectiveTeamCfg->help_business_name;
+        }
+        
+        // Use custom confirmation message if available, otherwise use default
+        $cap = (int) config('messaging.rate_limit.per_guest_monthly_cap', 10);
+        if ($effectiveTeamCfg && !empty($effectiveTeamCfg->opt_in_confirmation_message)) {
+            // Replace placeholders in custom message
+            $confirmation = str_replace([
+                '{business}',
+                '{cap}',
+                '{business_name}',
+                '{monthly_cap}'
+            ], [
+                $business,
+                $cap,
+                $business,
+                $cap
+            ], $effectiveTeamCfg->opt_in_confirmation_message);
+        } else {
+            // Default confirmation message
+            $confirmation = "You're almost done! Reply YES to confirm your $business text notifications (up to {$cap} messages/month). You'll receive appointment reminders, service updates, and occasional offers. Reply STOP to opt out, HELP for help. Msg & data rates may apply.";
+        }
 
         try {
             app(SmsService::class)->send($guest->phone, $confirmation, $teamId);

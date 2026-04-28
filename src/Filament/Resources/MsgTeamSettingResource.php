@@ -51,6 +51,11 @@ class MsgTeamSettingResource extends Resource
                         Components\TextInput::make('sms_from')
                             ->label('SMS From')
                             ->maxLength(255),
+                        Components\Textarea::make('opt_in_confirmation_message')
+                            ->label('Opt-in Confirmation Message')
+                            ->helperText('Custom message sent to users when they opt-in for SMS. Use placeholders: {business}, {business_name}, {cap}, {monthly_cap}')
+                            ->rows(4)
+                            ->placeholder("You're almost done! Reply YES to confirm your {business} text notifications (up to {cap} messages/month). You'll receive appointment reminders, service updates, and occasional offers. Reply STOP to opt out, HELP for help. Msg & data rates may apply."),
                     ])
                     ->columns(1),
 
