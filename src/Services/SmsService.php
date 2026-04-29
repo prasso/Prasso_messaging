@@ -33,7 +33,26 @@ class SmsService
             throw new \RuntimeException('SMS configuration incomplete');
         }
 
-        $e164To = str_starts_with($to, '+') ? $to : ('+' . preg_replace('/\D+/', '', $to));
+        // Normalize phone number to E.164 format
+        if (str_starts_with($to, '+')) {
+            // Already in E.164 format
+            $e164To = $to;
+        } else {
+            // Strip all non-digits
+            $digits = preg_replace('/\D+/', '', $to);
+
+            // Handle US/Canada numbers (10 or 11 digits starting with 1)
+            if (strlen($digits) === 10) {
+                // 10-digit US/Canada number: prepend +1
+                $e164To = '+1' . $digits;
+            } elseif (strlen($digits) === 11 && str_starts_with($digits, '1')) {
+                // 11-digit US/Canada number with leading 1: strip 1 and prepend +1
+                $e164To = '+1' . substr($digits, 1);
+            } else {
+                // International number: just prepend +
+                $e164To = '+' . $digits;
+            }
+        }
 
         $client = new Client($sid, $token);
         $client->messages->create($e164To, [
