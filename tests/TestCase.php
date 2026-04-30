@@ -14,6 +14,10 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
+        // Autoload stubs directory for test-specific classes
+        $loader = require __DIR__ . '/../vendor/autoload.php';
+        $loader->addPsr4('App\\', __DIR__ . '/Stubs/App');
+
         $default = config('database.default');
         $database = config("database.connections.$default.database");
 
